@@ -21,6 +21,7 @@ class handler(BaseHTTPRequestHandler):
         name = query.get("name", [None])[0]
         region_name = query.get("region_name", [None])[0]
         check_all = query.get("cheapest", [None])[0]
+        scan = query.get("scan", [None])[0]
 
         if check_all:
             regions_to_check = CHECK_REGIONS
@@ -93,8 +94,8 @@ class handler(BaseHTTPRequestHandler):
                 if str(type_id) not in data:
                     continue
 
-                sell_price = float(data[str(type_id)]["sell"]["min"])
-                buy_price = float(data[str(type_id)]["buy"]["max"]) if data[str(type_id)]["buy"]["max"] else 0.0
+                sell_price = float(data[str(type_id)]["sell"]["percentile"])
+                buy_price = float(data[str(type_id)]["buy"]["percentile"])
 
                 prices.append({"region": r_name, "sell_min": sell_price, "buy_max": buy_price})
 
