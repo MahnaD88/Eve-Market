@@ -99,7 +99,18 @@ class handler(BaseHTTPRequestHandler):
                 sell_volume = data[str(type_id)]["sell"]["volume"]
                 buy_volume = data[str(type_id)]["buy"]["volume"]
 
-                prices.append({"region": r_name, "sell_min": sell_price, "buy_max": buy_price})
+                if sell_volume < 10000 or buy_volume < 10000:
+                    continue
+
+                prices.append({
+                    "region": r_name,
+                    "sell_min": sell_price,
+                    "buy_max": buy_price,
+                    "sell_volume": sell_volume,
+                    "buy_volume": buy_volume,
+                    "sell_orders": data[str(type_id)]["sell"]["orders"],
+                    "buy_orders": data[str(type_id)]["buy"]["orders"]
+                })
 
                 if best_price is None or sell_price < best_price:
                     best_price = sell_price
