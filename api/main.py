@@ -64,24 +64,35 @@ else:
                 type_id = str(resolved["typeID"])
                 resolved_name = resolved.get("typeName", name)
 
-            r = requests.get(
-                "https://market.fuzzwork.co.uk/aggregates/",
-                params={"region": region, "types": type_id},
-                timeout=10
-            )
-            r.raise_for_status()
-            data = r.json()
+            best_price = None
+best_region = None
 
-            if str(type_id) not in data:
-                self.send_response(404)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(json.dumps({
-                    "error": f"No market data found for typeId {type_id} in region {region}"
-                }).encode())
-                return
+for r_name in regions_to_check:
+    r_id = REGIONS.get(r_name)
 
-            item = data[str(type_id)]
+    r = requests.get(
+        "https://market.fuzzwork.co.uk/aggregates/",
+        params={"region": r_id, "types": type_id},
+        timeout=10
+    )
+    r.raise_for_status()
+    data = r.json()
+
+    if str(type_id) not in data:
+        continue
+
+    sell_price = float(data[str(type_id)]["sell"]["min"])
+
+    if best_price is None or sell_price < best_price:
+        best_price = sell_price
+        best_region = r_name
+
+body = {
+    "typeId": int(type_id),
+    "name": resolved_name,
+    "region": best_region,
+    "sell_min": best_price
+}
 
             body = {
                 "typeId": int(type_id),
