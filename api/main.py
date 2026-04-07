@@ -9,15 +9,18 @@ class handler(BaseHTTPRequestHandler):
 
         type_id = query.get("typeId", [None])[0]
         name = query.get("name", [None])[0]
-        region = query.get("region", [None])[0]
+       region = query.get("region", [None])[0]
 region_name = query.get("region_name", [None])[0]
 
-# load region map
-with open("regions.json") as f:
-    regions = json.load(f)
+regions = {
+    "jita": "10000002",
+    "amarr": "10000043",
+    "dodixie": "10000032",
+    "hek": "10000042"
+}
 
 if region_name:
-    region = str(regions.get(region_name.lower()))
+    region = regions.get(region_name.lower())
 
 if not region:
     region = "10000002"
