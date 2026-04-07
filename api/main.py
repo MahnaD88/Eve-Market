@@ -118,7 +118,7 @@ class handler(BaseHTTPRequestHandler):
             profit_per_m3 = None
             if volume and best_buy is not None and best_price is not None:
                 try:
-                    profit_per_m3 = (best_price - best_buy) / float(volume)
+                    profit_per_m3 = (best_buy - best_price) / float(volume)
                 except Exception:
                     profit_per_m3 = None
 
