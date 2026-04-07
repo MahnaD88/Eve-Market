@@ -59,6 +59,7 @@ class handler(BaseHTTPRequestHandler):
                 type_id = str(resolved["typeID"])
                 resolved_name = resolved.get("typeName", name)
 
+            prices = []
             best_price = None
             best_region = None
 
@@ -81,6 +82,8 @@ class handler(BaseHTTPRequestHandler):
 
                 sell_price = float(data[str(type_id)]["sell"]["min"])
 
+                prices.append({"region": r_name, "sell_min": sell_price})
+
                 if best_price is None or sell_price < best_price:
                     best_price = sell_price
                     best_region = r_name
@@ -97,8 +100,9 @@ class handler(BaseHTTPRequestHandler):
             body = {
                 "typeId": int(type_id),
                 "name": resolved_name,
-                "region": best_region,
-                "sell_min": best_price
+                "best_region": best_region,
+                "best_sell_min": best_price,
+                "prices": prices
             }
 
             self.send_response(200)
