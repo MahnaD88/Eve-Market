@@ -99,8 +99,6 @@ class handler(BaseHTTPRequestHandler):
                 sell_volume = data[str(type_id)]["sell"]["volume"]
                 buy_volume = data[str(type_id)]["buy"]["volume"]
 
-                if sell_volume < 10000 or buy_volume < 10000:
-                    continue
 
                 prices.append({
                     "region": r_name,
