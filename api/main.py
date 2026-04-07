@@ -94,14 +94,7 @@ body = {
     "sell_min": best_price
 }
 
-            body = {
-                "typeId": int(type_id),
-                "name": resolved_name,
-                "region": int(region),
-                "region_name": region_name,
-                "buy_max": item["buy"]["max"],
-                "sell_min": item["sell"]["min"]
-            }
+            
 
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
