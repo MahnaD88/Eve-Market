@@ -18,18 +18,13 @@ class handler(BaseHTTPRequestHandler):
 
         type_id = query.get("typeId", [None])[0]
         name = query.get("name", [None])[0]
-        region = query.get("region", [None])[0]
         region_name = query.get("region_name", [None])[0]
-
         check_all = query.get("cheapest", [None])[0]
 
-if check_all:
-    regions_to_check = CHECK_REGIONS
-else:
-    regions_to_check = [region_name.lower()] if region_name else ["jita"]
-
-        if not region:
-            region = "10000002"
+        if check_all:
+            regions_to_check = CHECK_REGIONS
+        else:
+            regions_to_check = [region_name.lower()] if region_name else ["jita"]
 
         if not type_id and not name:
             self.send_response(400)
@@ -65,36 +60,46 @@ else:
                 resolved_name = resolved.get("typeName", name)
 
             best_price = None
-best_region = None
+            best_region = None
 
-for r_name in regions_to_check:
-    r_id = REGIONS.get(r_name)
+            for r_name in regions_to_check:
+                r_id = REGIONS.get(r_name)
 
-    r = requests.get(
-        "https://market.fuzzwork.co.uk/aggregates/",
-        params={"region": r_id, "types": type_id},
-        timeout=10
-    )
-    r.raise_for_status()
-    data = r.json()
+                if not r_id:
+                    continue
 
-    if str(type_id) not in data:
-        continue
+                r = requests.get(
+                    "https://market.fuzzwork.co.uk/aggregates/",
+                    params={"region": r_id, "types": type_id},
+                    timeout=10
+                )
+                r.raise_for_status()
+                data = r.json()
 
-    sell_price = float(data[str(type_id)]["sell"]["min"])
+                if str(type_id) not in data:
+                    continue
 
-    if best_price is None or sell_price < best_price:
-        best_price = sell_price
-        best_region = r_name
+                sell_price = float(data[str(type_id)]["sell"]["min"])
 
-body = {
-    "typeId": int(type_id),
-    "name": resolved_name,
-    "region": best_region,
-    "sell_min": best_price
-}
+                if best_price is None or sell_price < best_price:
+                    best_price = sell_price
+                    best_region = r_name
 
-            
+            if best_price is None:
+                self.send_response(404)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    "error": "No market data found"
+                }).encode())
+                return
+
+            body = {
+                "typeId": int(type_id),
+                "name": resolved_name,
+                "region": best_region,
+                "sell_min": best_price
+            }
 
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
