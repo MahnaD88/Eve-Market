@@ -22,22 +22,136 @@ class handler(BaseHTTPRequestHandler):
         region_name = query.get("region_name", [None])[0]
         check_all = query.get("cheapest", [None])[0]
         scan = query.get("scan", [None])[0]
+        top_n = int(query.get("top", [10])[0])
 
         if check_all:
             regions_to_check = CHECK_REGIONS
         else:
             regions_to_check = [region_name.lower()] if region_name else ["jita"]
 
-        if not type_id and not name:
+        if not type_id and not name and not scan:
             self.send_response(400)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             self.wfile.write(json.dumps({
-                "error": "Provide either typeId or name"
+                "error": "Provide name, typeId, or scan"
             }).encode())
             return
 
         try:
+            if scan:
+                item_names = [item.strip() for item in scan.split(",") if item.strip()]
+                results = []
+
+                for item_name in item_names:
+                    resolved_name = item_name
+                    current_type_id = None
+                    volume = None
+
+                    r = requests.get(
+                        "https://www.fuzzwork.co.uk/api/typeid.php",
+                        params={"typename": item_name},
+                        timeout=10
+                    )
+                    r.raise_for_status()
+                    resolved = r.json()
+
+                    if "typeID" not in resolved:
+                        continue
+
+                    current_type_id = str(resolved["typeID"])
+                    resolved_name = resolved.get("typeName", item_name)
+
+                    esi = requests.get(
+                        f"https://esi.evetech.net/latest/universe/types/{current_type_id}/",
+                        params={"datasource": "tranquility"},
+                        timeout=10
+                    )
+                    esi.raise_for_status()
+                    esi_data = esi.json()
+                    volume = esi_data.get("volume")
+
+                    prices = []
+                    best_price = None
+                    best_region = None
+                    best_buy = None
+                    best_buy_region = None
+
+                    for r_name in CHECK_REGIONS:
+                        r_id = REGIONS.get(r_name)
+
+                        if not r_id:
+                            continue
+
+                        market_r = requests.get(
+                            "https://market.fuzzwork.co.uk/aggregates/",
+                            params={"region": r_id, "types": current_type_id},
+                            timeout=10
+                        )
+                        market_r.raise_for_status()
+                        data = market_r.json()
+
+                        if str(current_type_id) not in data:
+                            continue
+
+                        sell_price = round(float(data[str(current_type_id)]["sell"]["percentile"]), 2)
+                        buy_price = round(float(data[str(current_type_id)]["buy"]["percentile"]), 2)
+                        sell_volume = float(data[str(current_type_id)]["sell"]["volume"])
+                        buy_volume = float(data[str(current_type_id)]["buy"]["volume"])
+
+                        prices.append({
+                            "region": r_name,
+                            "sell_min": sell_price,
+                            "buy_max": buy_price,
+                            "sell_volume": sell_volume,
+                            "buy_volume": buy_volume,
+                            "sell_orders": data[str(current_type_id)]["sell"].get("orders"),
+                            "buy_orders": data[str(current_type_id)]["buy"].get("orders")
+                        })
+
+                        if best_price is None or sell_price < best_price:
+                            best_price = sell_price
+                            best_region = r_name
+
+                        if best_buy is None or buy_price > best_buy:
+                            best_buy = buy_price
+                            best_buy_region = r_name
+
+                    if best_price is None or best_buy is None:
+                        continue
+
+                    profit_per_m3 = None
+                    if volume and best_buy is not None and best_price is not None:
+                        try:
+                            profit_per_m3 = round((best_buy - best_price) / float(volume), 2)
+                        except Exception:
+                            profit_per_m3 = None
+
+                    results.append({
+                        "typeId": int(current_type_id),
+                        "name": resolved_name,
+                        "volume": volume,
+                        "best_sell_region": best_region,
+                        "best_sell_min": best_price,
+                        "best_buy_region": best_buy_region,
+                        "best_buy_max": best_buy,
+                        "profit_per_m3": profit_per_m3,
+                        "prices": prices
+                    })
+
+                results = [r for r in results if r.get("profit_per_m3") is not None]
+                results.sort(key=lambda x: x["profit_per_m3"], reverse=True)
+
+                body = {
+                    "results": results[:top_n]
+                }
+
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps(body).encode())
+                return
+
             resolved_name = name
             volume = None
 
