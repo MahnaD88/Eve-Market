@@ -10,6 +10,8 @@ REGIONS = {
     "hek": "10000042"
 }
 
+CHECK_REGIONS = ["jita", "amarr", "dodixie", "hek"]
+
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         query = parse_qs(urlparse(self.path).query)
