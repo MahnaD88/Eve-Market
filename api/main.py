@@ -10,6 +10,7 @@ REGIONS = {
     "hek": "10000042"
 }
 
+
 CHECK_REGIONS = ["jita", "amarr", "dodixie", "hek"]
 
 class handler(BaseHTTPRequestHandler):
@@ -37,6 +38,7 @@ class handler(BaseHTTPRequestHandler):
 
         try:
             resolved_name = name
+            volume = None
 
             if not type_id and name:
                 r = requests.get(
@@ -58,6 +60,15 @@ class handler(BaseHTTPRequestHandler):
 
                 type_id = str(resolved["typeID"])
                 resolved_name = resolved.get("typeName", name)
+
+            esi = requests.get(
+                f"https://esi.evetech.net/latest/universe/types/{type_id}/",
+                params={"datasource": "tranquility"},
+                timeout=10
+            )
+            esi.raise_for_status()
+            esi_data = esi.json()
+            volume = esi_data.get("volume")
 
             prices = []
             best_price = None
@@ -100,6 +111,7 @@ class handler(BaseHTTPRequestHandler):
             body = {
                 "typeId": int(type_id),
                 "name": resolved_name,
+                "volume": volume,
                 "best_region": best_region,
                 "best_sell_min": best_price,
                 "prices": prices
