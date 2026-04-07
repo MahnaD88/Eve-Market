@@ -96,6 +96,8 @@ class handler(BaseHTTPRequestHandler):
 
                 sell_price = round(float(data[str(type_id)]["sell"]["percentile"]), 2)
                 buy_price = round(float(data[str(type_id)]["buy"]["percentile"]), 2)
+                sell_volume = data[str(type_id)]["sell"]["volume"]
+                buy_volume = data[str(type_id)]["buy"]["volume"]
 
                 prices.append({"region": r_name, "sell_min": sell_price, "buy_max": buy_price})
 
