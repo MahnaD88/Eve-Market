@@ -73,6 +73,8 @@ class handler(BaseHTTPRequestHandler):
             prices = []
             best_price = None
             best_region = None
+            best_buy = None
+            best_buy_region = None
 
             for r_name in regions_to_check:
                 r_id = REGIONS.get(r_name)
@@ -92,14 +94,19 @@ class handler(BaseHTTPRequestHandler):
                     continue
 
                 sell_price = float(data[str(type_id)]["sell"]["min"])
+                buy_price = float(data[str(type_id)]["buy"]["max"]) if data[str(type_id)]["buy"]["max"] else 0.0
 
-                prices.append({"region": r_name, "sell_min": sell_price})
+                prices.append({"region": r_name, "sell_min": sell_price, "buy_max": buy_price})
 
                 if best_price is None or sell_price < best_price:
                     best_price = sell_price
                     best_region = r_name
 
-            if best_price is None:
+                if best_buy is None or buy_price > best_buy:
+                    best_buy = buy_price
+                    best_buy_region = r_name
+
+            if best_price is None or best_buy is None:
                 self.send_response(404)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
@@ -108,12 +115,22 @@ class handler(BaseHTTPRequestHandler):
                 }).encode())
                 return
 
+            profit_per_m3 = None
+            if volume and best_buy is not None and best_price is not None:
+                try:
+                    profit_per_m3 = (best_price - best_buy) / float(volume)
+                except Exception:
+                    profit_per_m3 = None
+
             body = {
                 "typeId": int(type_id),
                 "name": resolved_name,
                 "volume": volume,
-                "best_region": best_region,
+                "best_sell_region": best_region,
                 "best_sell_min": best_price,
+                "best_buy_region": best_buy_region,
+                "best_buy_max": best_buy,
+                "profit_per_m3": profit_per_m3,
                 "prices": prices
             }
 
