@@ -21,8 +21,12 @@ class handler(BaseHTTPRequestHandler):
         region = query.get("region", [None])[0]
         region_name = query.get("region_name", [None])[0]
 
-        if region_name:
-            region = REGIONS.get(region_name.lower())
+        check_all = query.get("cheapest", [None])[0]
+
+if check_all:
+    regions_to_check = CHECK_REGIONS
+else:
+    regions_to_check = [region_name.lower()] if region_name else ["jita"]
 
         if not region:
             region = "10000002"
