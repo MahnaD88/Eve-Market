@@ -94,8 +94,8 @@ class handler(BaseHTTPRequestHandler):
                 if str(type_id) not in data:
                     continue
 
-                sell_price = float(data[str(type_id)]["sell"]["percentile"])
-                buy_price = float(data[str(type_id)]["buy"]["percentile"])
+                sell_price = round(float(data[str(type_id)]["sell"]["percentile"]), 2)
+                buy_price = round(float(data[str(type_id)]["buy"]["percentile"]), 2)
 
                 prices.append({"region": r_name, "sell_min": sell_price, "buy_max": buy_price})
 
@@ -119,7 +119,7 @@ class handler(BaseHTTPRequestHandler):
             profit_per_m3 = None
             if volume and best_buy is not None and best_price is not None:
                 try:
-                    profit_per_m3 = (best_buy - best_price) / float(volume)
+                    profit_per_m3 = round((best_buy - best_price) / float(volume), 2)
                 except Exception:
                     profit_per_m3 = None
 
