@@ -3,7 +3,7 @@ import sqlite3
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
-DB_PATH = "eve_sde.sqlite"  # change this to your sqlite filename
+DB_PATH = "eve-indy.sqlite"  # change this to your sqlite filename
 
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
