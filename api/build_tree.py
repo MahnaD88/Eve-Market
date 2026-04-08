@@ -3,7 +3,7 @@ import sqlite3
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
-DB_PATH = "eve-indy.sqlite"  # change this to your sqlite filename
+DB_PATH = "eve-indy.sqlite"
 
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
@@ -34,8 +34,7 @@ def get_blueprint_and_materials(conn, product_name):
     WHERE p.activityID = 1
       AND prod.typeName = ?
     """
-    rows = conn.execute(query, (product_name,)).fetchall()
-    return rows
+    return conn.execute(query, (product_name,)).fetchall()
 
 def is_buildable(conn, item_name):
     query = """
@@ -47,8 +46,7 @@ def is_buildable(conn, item_name):
       AND prod.typeName = ?
     LIMIT 1
     """
-    row = conn.execute(query, (item_name,)).fetchone()
-    return row is not None
+    return conn.execute(query, (item_name,)).fetchone() is not None
 
 def build_tree(conn, product_name, depth=0, max_depth=10):
     if depth > max_depth:
@@ -68,6 +66,7 @@ def build_tree(conn, product_name, depth=0, max_depth=10):
         }
 
     first = rows[0]
+
     node = {
         "name": first["productName"],
         "blueprint": first["blueprintName"],
@@ -101,6 +100,14 @@ def build_tree(conn, product_name, depth=0, max_depth=10):
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
+
+        # TEST BLOCK
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps({"test": "build_tree endpoint hit"}).encode())
+        return
+
         query = parse_qs(urlparse(self.path).query)
         name = query.get("name", [None])[0]
 
