@@ -5,8 +5,9 @@ from urllib.parse import urlparse, parse_qs
 
 DB_PATH = "eve-indy.sqlite"
 
-# NEW: cache
+# CACHES
 buildable_cache = {}
+blueprint_cache = {}
 
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
@@ -14,6 +15,10 @@ def get_connection():
     return conn
 
 def get_blueprint_and_materials(conn, product_name):
+    # NEW: cache check
+    if product_name in blueprint_cache:
+        return blueprint_cache[product_name]
+
     query = """
     SELECT
         p.typeID AS blueprintTypeID,
@@ -37,10 +42,15 @@ def get_blueprint_and_materials(conn, product_name):
     WHERE p.activityID = 1
       AND prod.typeName = ?
     """
-    return conn.execute(query, (product_name,)).fetchall()
+
+    rows = conn.execute(query, (product_name,)).fetchall()
+
+    # NEW: store in cache
+    blueprint_cache[product_name] = rows
+
+    return rows
 
 def is_buildable(conn, item_name):
-    # NEW: cache check
     if item_name in buildable_cache:
         return buildable_cache[item_name]
 
@@ -55,9 +65,7 @@ def is_buildable(conn, item_name):
     """
     result = conn.execute(query, (item_name,)).fetchone() is not None
 
-    # NEW: store result
     buildable_cache[item_name] = result
-
     return result
 
 def build_tree(conn, product_name, depth=0, max_depth=10):
