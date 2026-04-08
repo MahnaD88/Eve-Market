@@ -123,14 +123,6 @@ def build_tree(conn, product_name, quantity=1, depth=0, max_depth=10):
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
-
-        # TEST BLOCK
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        self.wfile.write(json.dumps({"test": "build_tree endpoint hit"}).encode())
-        return
-
         query = parse_qs(urlparse(self.path).query)
         name = query.get("name", [None])[0]
 
