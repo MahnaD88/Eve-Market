@@ -1,6 +1,8 @@
 from http.server import BaseHTTPRequestHandler
 import json
+import math
 import sqlite3
+from collections import defaultdict
 from urllib.parse import urlparse, parse_qs
 import requests
 
@@ -14,6 +16,10 @@ REGIONS = {
 CHECK_REGIONS = ["jita", "amarr", "dodixie", "hek"]
 DB_PATH = "api/eve-indy.sqlite"
 
+# BUILD CACHES
+buildable_cache = {}
+blueprint_cache = {}
+
 
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
@@ -22,6 +28,9 @@ def get_connection():
 
 
 def get_blueprint_and_materials(conn, product_name):
+    if product_name in blueprint_cache:
+        return blueprint_cache[product_name]
+
     query = """
     SELECT
         p.typeID AS blueprintTypeID,
@@ -45,10 +54,16 @@ def get_blueprint_and_materials(conn, product_name):
     WHERE p.activityID = 1
       AND prod.typeName = ?
     """
-    return conn.execute(query, (product_name,)).fetchall()
+
+    rows = conn.execute(query, (product_name,)).fetchall()
+    blueprint_cache[product_name] = rows
+    return rows
 
 
 def is_buildable(conn, item_name):
+    if item_name in buildable_cache:
+        return buildable_cache[item_name]
+
     query = """
     SELECT 1
     FROM industryActivityProducts p
@@ -58,13 +73,16 @@ def is_buildable(conn, item_name):
       AND prod.typeName = ?
     LIMIT 1
     """
-    return conn.execute(query, (item_name,)).fetchone() is not None
+    result = conn.execute(query, (item_name,)).fetchone() is not None
+    buildable_cache[item_name] = result
+    return result
 
 
-def build_tree(conn, product_name, depth=0, max_depth=10):
+def build_tree(conn, product_name, quantity=1, depth=0, max_depth=10):
     if depth > max_depth:
         return {
             "name": product_name,
+            "quantity_requested": quantity,
             "buildable": False,
             "error": "Max depth reached"
         }
@@ -74,22 +92,28 @@ def build_tree(conn, product_name, depth=0, max_depth=10):
     if not rows:
         return {
             "name": product_name,
+            "quantity_requested": quantity,
             "buildable": False,
             "materials": []
         }
 
     first = rows[0]
+    output_quantity = first["outputQuantity"]
+    runs_needed = math.ceil(quantity / output_quantity)
+
     node = {
         "name": first["productName"],
         "blueprint": first["blueprintName"],
-        "output_quantity": first["outputQuantity"],
+        "output_quantity": output_quantity,
+        "quantity_requested": quantity,
+        "runs_needed": runs_needed,
         "buildable": True,
         "materials": []
     }
 
     for row in rows:
         material_name = row["materialName"]
-        material_qty = row["materialQuantity"]
+        material_qty = row["materialQuantity"] * runs_needed
         material_buildable = is_buildable(conn, material_name)
 
         material_node = {
@@ -102,13 +126,65 @@ def build_tree(conn, product_name, depth=0, max_depth=10):
             material_node["components"] = build_tree(
                 conn,
                 material_name,
-                depth + 1,
-                max_depth
+                quantity=material_qty,
+                depth=depth + 1,
+                max_depth=max_depth
             )
 
         node["materials"].append(material_node)
 
     return node
+
+
+def collect_raw_materials(tree, totals=None):
+    if totals is None:
+        totals = defaultdict(int)
+
+    if not tree.get("buildable", False):
+        qty = tree.get("quantity_requested", 0)
+        if qty:
+            totals[tree["name"]] += qty
+        return totals
+
+    for material in tree.get("materials", []):
+        if material.get("buildable"):
+            collect_raw_materials(material["components"], totals)
+        else:
+            totals[material["name"]] += material["quantity"]
+
+    return totals
+
+
+def build_response(conn, product_name, quantity=1, mode="tree"):
+    tree = build_tree(conn, product_name, quantity=quantity)
+
+    if mode == "tree":
+        return tree
+
+    raw_totals = collect_raw_materials(tree)
+    raw_list = [
+        {"name": name, "quantity": qty}
+        for name, qty in sorted(raw_totals.items())
+    ]
+
+    if mode == "raw":
+        return {
+            "name": product_name,
+            "quantity_requested": quantity,
+            "raw_materials": raw_list
+        }
+
+    if mode == "both":
+        return {
+            "name": product_name,
+            "quantity_requested": quantity,
+            "tree": tree,
+            "raw_materials": raw_list
+        }
+
+    return {
+        "error": f"Invalid mode '{mode}'. Use tree, raw, or both."
+    }
 
 
 class handler(BaseHTTPRequestHandler):
@@ -121,10 +197,49 @@ class handler(BaseHTTPRequestHandler):
         region_name = query.get("region_name", [None])[0]
         check_all = query.get("cheapest", [None])[0]
         scan = query.get("scan", [None])[0]
-        top_n = int(query.get("top", [10])[0])
 
         try:
-            # BUILD TREE MODE
+            top_n = int(query.get("top", ["10"])[0])
+        except ValueError:
+            top_n = 10
+
+        try:
+            quantity = int(query.get("quantity", ["1"])[0])
+            if quantity < 1:
+                raise ValueError
+        except ValueError:
+            self.send_response(400)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "error": "quantity must be a positive integer"
+            }).encode())
+            return
+
+        try:
+            # BUILD MODE
+            if mode in ["tree", "raw", "both"]:
+                if not name:
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({
+                        "error": "Provide name for build mode"
+                    }).encode())
+                    return
+
+                conn = get_connection()
+                response = build_response(conn, name, quantity=quantity, mode=mode)
+                conn.close()
+
+                status = 200 if "error" not in response else 400
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps(response).encode())
+                return
+
+            # LEGACY BUILD MODE SUPPORT
             if mode == "build_tree":
                 if not name:
                     self.send_response(400)
@@ -136,13 +251,13 @@ class handler(BaseHTTPRequestHandler):
                     return
 
                 conn = get_connection()
-                tree = build_tree(conn, name)
+                response = build_response(conn, name, quantity=quantity, mode="tree")
                 conn.close()
 
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
-                self.wfile.write(json.dumps(tree).encode())
+                self.wfile.write(json.dumps(response).encode())
                 return
 
             # MARKET MODE
