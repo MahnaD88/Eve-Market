@@ -12,7 +12,7 @@ REGIONS = {
 }
 
 CHECK_REGIONS = ["jita", "amarr", "dodixie", "hek"]
-DB_PATH = "eve-indy.sqlite"
+DB_PATH = "api/eve-indy.sqlite"
 
 
 def get_connection():
