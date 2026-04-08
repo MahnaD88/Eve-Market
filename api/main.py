@@ -78,6 +78,33 @@ def is_buildable(conn, item_name):
     return result
 
 
+def get_buy_price(type_id):
+    best_price = None
+
+    for r_name in CHECK_REGIONS:
+        r_id = REGIONS.get(r_name)
+        if not r_id:
+            continue
+
+        r = requests.get(
+            "https://market.fuzzwork.co.uk/aggregates/",
+            params={"region": r_id, "types": type_id},
+            timeout=10
+        )
+        r.raise_for_status()
+        data = r.json()
+
+        if str(type_id) not in data:
+            continue
+
+        sell_price = float(data[str(type_id)]["sell"]["percentile"])
+
+        if best_price is None or sell_price < best_price:
+            best_price = sell_price
+
+    return best_price
+
+
 def build_tree(conn, product_name, quantity=1, depth=0, max_depth=10):
     if depth > max_depth:
         return {
