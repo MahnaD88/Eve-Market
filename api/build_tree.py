@@ -1,4 +1,5 @@
 import json
+import math
 import sqlite3
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
@@ -15,7 +16,6 @@ def get_connection():
     return conn
 
 def get_blueprint_and_materials(conn, product_name):
-    # NEW: cache check
     if product_name in blueprint_cache:
         return blueprint_cache[product_name]
 
@@ -44,10 +44,7 @@ def get_blueprint_and_materials(conn, product_name):
     """
 
     rows = conn.execute(query, (product_name,)).fetchall()
-
-    # NEW: store in cache
     blueprint_cache[product_name] = rows
-
     return rows
 
 def is_buildable(conn, item_name):
@@ -64,14 +61,14 @@ def is_buildable(conn, item_name):
     LIMIT 1
     """
     result = conn.execute(query, (item_name,)).fetchone() is not None
-
     buildable_cache[item_name] = result
     return result
 
-def build_tree(conn, product_name, depth=0, max_depth=10):
+def build_tree(conn, product_name, quantity=1, depth=0, max_depth=10):
     if depth > max_depth:
         return {
             "name": product_name,
+            "quantity_requested": quantity,
             "buildable": False,
             "error": "Max depth reached"
         }
@@ -81,23 +78,28 @@ def build_tree(conn, product_name, depth=0, max_depth=10):
     if not rows:
         return {
             "name": product_name,
+            "quantity_requested": quantity,
             "buildable": False,
             "materials": []
         }
 
     first = rows[0]
+    output_quantity = first["outputQuantity"]
+    runs_needed = math.ceil(quantity / output_quantity)
 
     node = {
         "name": first["productName"],
         "blueprint": first["blueprintName"],
-        "output_quantity": first["outputQuantity"],
+        "output_quantity": output_quantity,
+        "quantity_requested": quantity,
+        "runs_needed": runs_needed,
         "buildable": True,
         "materials": []
     }
 
     for row in rows:
         material_name = row["materialName"]
-        material_qty = row["materialQuantity"]
+        material_qty = row["materialQuantity"] * runs_needed
         material_buildable = is_buildable(conn, material_name)
 
         material_node = {
@@ -110,8 +112,9 @@ def build_tree(conn, product_name, depth=0, max_depth=10):
             material_node["components"] = build_tree(
                 conn,
                 material_name,
-                depth + 1,
-                max_depth
+                quantity=material_qty,
+                depth=depth + 1,
+                max_depth=max_depth
             )
 
         node["materials"].append(material_node)
@@ -131,6 +134,17 @@ class handler(BaseHTTPRequestHandler):
         query = parse_qs(urlparse(self.path).query)
         name = query.get("name", [None])[0]
 
+        try:
+            quantity = int(query.get("quantity", ["1"])[0])
+            if quantity < 1:
+                raise ValueError
+        except ValueError:
+            self.send_response(400)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": "quantity must be a positive integer"}).encode())
+            return
+
         if not name:
             self.send_response(400)
             self.send_header("Content-Type", "application/json")
@@ -140,7 +154,7 @@ class handler(BaseHTTPRequestHandler):
 
         try:
             conn = get_connection()
-            tree = build_tree(conn, name)
+            tree = build_tree(conn, name, quantity=quantity)
             conn.close()
 
             self.send_response(200)
