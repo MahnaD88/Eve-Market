@@ -1,6 +1,7 @@
 import json
 import math
 import sqlite3
+from collections import defaultdict
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
@@ -121,10 +122,60 @@ def build_tree(conn, product_name, quantity=1, depth=0, max_depth=10):
 
     return node
 
+def collect_raw_materials(tree, totals=None):
+    if totals is None:
+        totals = defaultdict(int)
+
+    if not tree.get("buildable", False):
+        qty = tree.get("quantity_requested", 0)
+        if qty:
+            totals[tree["name"]] += qty
+        return totals
+
+    for material in tree.get("materials", []):
+        if material.get("buildable"):
+            collect_raw_materials(material["components"], totals)
+        else:
+            totals[material["name"]] += material["quantity"]
+
+    return totals
+
+def build_response(conn, product_name, quantity=1, mode="tree"):
+    tree = build_tree(conn, product_name, quantity=quantity)
+
+    if mode == "tree":
+        return tree
+
+    raw_totals = collect_raw_materials(tree)
+    raw_list = [
+        {"name": name, "quantity": qty}
+        for name, qty in sorted(raw_totals.items())
+    ]
+
+    if mode == "raw":
+        return {
+            "name": product_name,
+            "quantity_requested": quantity,
+            "raw_materials": raw_list
+        }
+
+    if mode == "both":
+        return {
+            "name": product_name,
+            "quantity_requested": quantity,
+            "tree": tree,
+            "raw_materials": raw_list
+        }
+
+    return {
+        "error": f"Invalid mode '{mode}'. Use tree, raw, or both."
+    }
+
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         query = parse_qs(urlparse(self.path).query)
         name = query.get("name", [None])[0]
+        mode = query.get("mode", ["tree"])[0].lower()
 
         try:
             quantity = int(query.get("quantity", ["1"])[0])
@@ -146,13 +197,14 @@ class handler(BaseHTTPRequestHandler):
 
         try:
             conn = get_connection()
-            tree = build_tree(conn, name, quantity=quantity)
+            response = build_response(conn, name, quantity=quantity, mode=mode)
             conn.close()
 
-            self.send_response(200)
+            status = 200 if "error" not in response else 400
+            self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
-            self.wfile.write(json.dumps(tree).encode())
+            self.wfile.write(json.dumps(response).encode())
 
         except Exception as e:
             self.send_response(500)
