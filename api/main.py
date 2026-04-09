@@ -19,6 +19,8 @@ DB_PATH = "api/eve-indy.sqlite"
 # BUILD CACHES
 buildable_cache = {}
 blueprint_cache = {}
+typeid_cache = {}
+buy_price_cache = {}
 
 
 def get_connection():
@@ -78,7 +80,34 @@ def is_buildable(conn, item_name):
     return result
 
 
+def resolve_type_id(item_name):
+    if item_name in typeid_cache:
+        return typeid_cache[item_name]
+
+    try:
+        r = requests.get(
+            "https://www.fuzzwork.co.uk/api/typeid.php",
+            params={"typename": item_name},
+            timeout=5
+        )
+        r.raise_for_status()
+        resolved = r.json()
+
+        if "typeID" in resolved:
+            type_id = str(resolved["typeID"])
+            typeid_cache[item_name] = type_id
+            return type_id
+    except Exception:
+        pass
+
+    typeid_cache[item_name] = None
+    return None
+
+
 def get_buy_price(type_id):
+    if type_id in buy_price_cache:
+        return buy_price_cache[type_id]
+
     best_price = None
 
     for r_name in CHECK_REGIONS:
@@ -102,6 +131,7 @@ def get_buy_price(type_id):
         if best_price is None or sell_price < best_price:
             best_price = sell_price
 
+    buy_price_cache[type_id] = best_price
     return best_price
 
 
@@ -143,10 +173,20 @@ def build_tree(conn, product_name, quantity=1, depth=0, max_depth=10):
         material_qty = row["materialQuantity"] * runs_needed
         material_buildable = is_buildable(conn, material_name)
 
+        buy_price = None
+        if not material_buildable:
+            type_id = resolve_type_id(material_name)
+            if type_id:
+                try:
+                    buy_price = get_buy_price(type_id)
+                except Exception:
+                    buy_price = None
+
         material_node = {
             "name": material_name,
             "quantity": material_qty,
-            "buildable": material_buildable
+            "buildable": material_buildable,
+            "buy_price": buy_price
         }
 
         if material_buildable:
