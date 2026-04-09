@@ -228,17 +228,6 @@ class handler(BaseHTTPRequestHandler):
         if mode:
             mode = mode.strip().lower()
 
-        # DEBUG BLOCK (TEMP)
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        self.wfile.write(json.dumps({
-            "debug_mode": mode,
-            "debug_name": name,
-            "debug_path": self.path
-        }).encode())
-        return
-
         try:
             top_n = int(query.get("top", ["10"])[0])
         except ValueError:
