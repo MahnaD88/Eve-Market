@@ -255,19 +255,26 @@ def build_response(conn, product_name, quantity=1, mode="tree"):
 
     build_vs_buy = None
     savings = None
+    margin_threshold = None
 
     if market_price is not None and total_cost is not None:
-        if total_cost < market_price:
+        margin_threshold = market_price * 0.95
+
+        if total_cost < margin_threshold:
             build_vs_buy = "build"
             savings = market_price - total_cost
-        else:
+        elif total_cost > market_price:
             build_vs_buy = "buy"
             savings = total_cost - market_price
+        else:
+            build_vs_buy = "marginal"
+            savings = abs(market_price - total_cost)
 
     if mode == "tree":
         return {
             **tree,
             "market_price": market_price,
+            "margin_threshold": margin_threshold,
             "build_vs_buy": build_vs_buy,
             "savings": savings
         }
@@ -284,6 +291,7 @@ def build_response(conn, product_name, quantity=1, mode="tree"):
             "quantity_requested": quantity,
             "raw_materials": raw_list,
             "market_price": market_price,
+            "margin_threshold": margin_threshold,
             "build_vs_buy": build_vs_buy,
             "savings": savings
         }
@@ -295,6 +303,7 @@ def build_response(conn, product_name, quantity=1, mode="tree"):
             "tree": tree,
             "raw_materials": raw_list,
             "market_price": market_price,
+            "margin_threshold": margin_threshold,
             "build_vs_buy": build_vs_buy,
             "savings": savings
         }
