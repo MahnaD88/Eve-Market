@@ -258,15 +258,20 @@ def build_tree(conn, product_name, quantity=1, depth=0, max_depth=10):
 
             component_type_id = resolve_type_id(material_name)
             component_market_price = None
+            component_market_total_price = None
             if component_type_id:
                 try:
                     component_market_price = get_buy_price(component_type_id)
+                    if component_market_price is not None:
+                        component_market_total_price = component_market_price * material_qty
                 except Exception:
                     component_market_price = None
+                    component_market_total_price = None
 
-            material_node.update(
-                evaluate_build_vs_buy(component_total_cost, component_market_price)
-            )
+            decision = evaluate_build_vs_buy(component_total_cost, component_market_total_price)
+            decision["unit_market_price"] = component_market_price
+            decision["market_total_price"] = component_market_total_price
+            material_node.update(decision)
         else:
             type_id = resolve_type_id(material_name)
             if type_id:
