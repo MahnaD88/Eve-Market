@@ -132,6 +132,61 @@ def get_buy_price(type_id):
             best_price = sell_price
 
     buy_price_cache[type_id] = best_price
+    return buy_price_cache[type_id]
+
+
+def evaluate_build_vs_buy(total_cost, market_price):
+    margin_threshold = None
+    difference_percent = None
+    build_vs_buy = None
+    savings = None
+
+    if market_price is not None and total_cost is not None and market_price > 0:
+        margin_threshold = market_price * 0.95
+        difference_percent = ((market_price - total_cost) / market_price) * 100
+
+        if total_cost < margin_threshold:
+            build_vs_buy = "build"
+            savings = market_price - total_cost
+        elif total_cost > market_price:
+            build_vs_buy = "buy"
+            savings = total_cost - market_price
+        else:
+            build_vs_buy = "marginal"
+            savings = abs(market_price - total_cost)
+
+    return {
+        "market_price": market_price,
+        "margin_threshold": margin_threshold,
+        "difference_percent": difference_percent,
+        "build_vs_buy": build_vs_buy,
+        "savings": savings
+    }
+
+    best_price = None
+
+    for r_name in CHECK_REGIONS:
+        r_id = REGIONS.get(r_name)
+        if not r_id:
+            continue
+
+        r = requests.get(
+            "https://market.fuzzwork.co.uk/aggregates/",
+            params={"region": r_id, "types": type_id},
+            timeout=10
+        )
+        r.raise_for_status()
+        data = r.json()
+
+        if str(type_id) not in data:
+            continue
+
+        sell_price = float(data[str(type_id)]["sell"]["percentile"])
+
+        if best_price is None or sell_price < best_price:
+            best_price = sell_price
+
+    buy_price_cache[type_id] = best_price
     return best_price
 
 
@@ -179,24 +234,12 @@ def build_tree(conn, product_name, quantity=1, depth=0, max_depth=10):
         buy_price = None
         line_total = None
 
-        if not material_buildable:
-            type_id = resolve_type_id(material_name)
-            if type_id:
-                try:
-                    buy_price = get_buy_price(type_id)
-                    if buy_price is not None:
-                        line_total = buy_price * material_qty
-                        total_cost += line_total
-                except Exception:
-                    buy_price = None
-                    line_total = None
-
         material_node = {
             "name": material_name,
             "quantity": material_qty,
             "buildable": material_buildable,
-            "buy_price": buy_price,
-            "line_total": line_total
+            "buy_price": None,
+            "line_total": None
         }
 
         if material_buildable:
@@ -209,8 +252,35 @@ def build_tree(conn, product_name, quantity=1, depth=0, max_depth=10):
             )
             material_node["components"] = component
 
-            if component.get("total_cost"):
-                total_cost += component["total_cost"]
+            component_total_cost = component.get("total_cost")
+            if component_total_cost is not None:
+                total_cost += component_total_cost
+
+            component_type_id = resolve_type_id(material_name)
+            component_market_price = None
+            if component_type_id:
+                try:
+                    component_market_price = get_buy_price(component_type_id)
+                except Exception:
+                    component_market_price = None
+
+            material_node.update(
+                evaluate_build_vs_buy(component_total_cost, component_market_price)
+            )
+        else:
+            type_id = resolve_type_id(material_name)
+            if type_id:
+                try:
+                    buy_price = get_buy_price(type_id)
+                    if buy_price is not None:
+                        line_total = buy_price * material_qty
+                        total_cost += line_total
+                except Exception:
+                    buy_price = None
+                    line_total = None
+
+            material_node["buy_price"] = buy_price
+            material_node["line_total"] = line_total
 
         node["materials"].append(material_node)
 
@@ -241,7 +311,6 @@ def collect_raw_materials(tree, totals=None):
 def build_response(conn, product_name, quantity=1, mode="tree"):
     tree = build_tree(conn, product_name, quantity=quantity)
 
-    # get market price for final item
     type_id = resolve_type_id(product_name)
     market_price = None
 
@@ -251,35 +320,12 @@ def build_response(conn, product_name, quantity=1, mode="tree"):
         except Exception:
             market_price = None
 
-    total_cost = tree.get("total_cost")
-
-    build_vs_buy = None
-    savings = None
-    margin_threshold = None
-    difference_percent = None
-
-    if market_price is not None and total_cost is not None and market_price > 0:
-        margin_threshold = market_price * 0.95
-        difference_percent = ((market_price - total_cost) / market_price) * 100
-
-        if total_cost < margin_threshold:
-            build_vs_buy = "build"
-            savings = market_price - total_cost
-        elif total_cost > market_price:
-            build_vs_buy = "buy"
-            savings = total_cost - market_price
-        else:
-            build_vs_buy = "marginal"
-            savings = abs(market_price - total_cost)
+    decision = evaluate_build_vs_buy(tree.get("total_cost"), market_price)
 
     if mode == "tree":
         return {
             **tree,
-            "market_price": market_price,
-            "margin_threshold": margin_threshold,
-            "difference_percent": difference_percent,
-            "build_vs_buy": build_vs_buy,
-            "savings": savings
+            **decision
         }
 
     raw_totals = collect_raw_materials(tree)
@@ -293,11 +339,7 @@ def build_response(conn, product_name, quantity=1, mode="tree"):
             "name": product_name,
             "quantity_requested": quantity,
             "raw_materials": raw_list,
-            "market_price": market_price,
-            "margin_threshold": margin_threshold,
-            "difference_percent": difference_percent,
-            "build_vs_buy": build_vs_buy,
-            "savings": savings
+            **decision
         }
 
     if mode == "both":
@@ -306,11 +348,7 @@ def build_response(conn, product_name, quantity=1, mode="tree"):
             "quantity_requested": quantity,
             "tree": tree,
             "raw_materials": raw_list,
-            "market_price": market_price,
-            "margin_threshold": margin_threshold,
-            "difference_percent": difference_percent,
-            "build_vs_buy": build_vs_buy,
-            "savings": savings
+            **decision
         }
 
     return {
