@@ -241,8 +241,36 @@ def collect_raw_materials(tree, totals=None):
 def build_response(conn, product_name, quantity=1, mode="tree"):
     tree = build_tree(conn, product_name, quantity=quantity)
 
+    # get market price for final item
+    type_id = resolve_type_id(product_name)
+    market_price = None
+
+    if type_id:
+        try:
+            market_price = get_buy_price(type_id)
+        except Exception:
+            market_price = None
+
+    total_cost = tree.get("total_cost")
+
+    build_vs_buy = None
+    savings = None
+
+    if market_price is not None and total_cost is not None:
+        if total_cost < market_price:
+            build_vs_buy = "build"
+            savings = market_price - total_cost
+        else:
+            build_vs_buy = "buy"
+            savings = total_cost - market_price
+
     if mode == "tree":
-        return tree
+        return {
+            **tree,
+            "market_price": market_price,
+            "build_vs_buy": build_vs_buy,
+            "savings": savings
+        }
 
     raw_totals = collect_raw_materials(tree)
     raw_list = [
@@ -254,8 +282,26 @@ def build_response(conn, product_name, quantity=1, mode="tree"):
         return {
             "name": product_name,
             "quantity_requested": quantity,
-            "raw_materials": raw_list
+            "raw_materials": raw_list,
+            "market_price": market_price,
+            "build_vs_buy": build_vs_buy,
+            "savings": savings
         }
+
+    if mode == "both":
+        return {
+            "name": product_name,
+            "quantity_requested": quantity,
+            "tree": tree,
+            "raw_materials": raw_list,
+            "market_price": market_price,
+            "build_vs_buy": build_vs_buy,
+            "savings": savings
+        }
+
+    return {
+        "error": f"Invalid mode '{mode}'. Use tree, raw, or both."
+    }
 
     if mode == "both":
         return {
