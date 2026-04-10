@@ -105,6 +105,9 @@ def resolve_type_id(item_name):
 
 
 def get_buy_price(type_id):
+    if not type_id:
+        return None
+
     if type_id in buy_price_cache:
         return buy_price_cache[type_id]
 
@@ -127,12 +130,14 @@ def get_buy_price(type_id):
             continue
 
         sell_price = float(data[str(type_id)]["sell"]["percentile"])
+        if sell_price <= 0:
+            continue
 
         if best_price is None or sell_price < best_price:
             best_price = sell_price
 
     buy_price_cache[type_id] = best_price
-    return buy_price_cache[type_id]
+    return best_price
 
 
 def evaluate_build_vs_buy(total_cost, market_price):
@@ -163,31 +168,36 @@ def evaluate_build_vs_buy(total_cost, market_price):
         "savings": savings
     }
 
-    best_price = None
 
-    for r_name in CHECK_REGIONS:
-        r_id = REGIONS.get(r_name)
-        if not r_id:
-            continue
+def extract_build_buy_plan(tree):
+    build = []
+    buy = []
+    marginal = []
 
-        r = requests.get(
-            "https://market.fuzzwork.co.uk/aggregates/",
-            params={"region": r_id, "types": type_id},
-            timeout=10
-        )
-        r.raise_for_status()
-        data = r.json()
+    for material in tree.get("materials", []):
+        decision = material.get("build_vs_buy")
+        entry = {
+            "name": material.get("name"),
+            "quantity": material.get("quantity"),
+            "unit_market_price": material.get("unit_market_price"),
+            "market_total_price": material.get("market_total_price"),
+            "component_total_cost": material.get("components", {}).get("total_cost") if material.get("buildable") else None,
+            "difference_percent": material.get("difference_percent"),
+            "savings": material.get("savings")
+        }
 
-        if str(type_id) not in data:
-            continue
+        if decision == "build":
+            build.append(entry)
+        elif decision == "buy":
+            buy.append(entry)
+        elif decision == "marginal":
+            marginal.append(entry)
 
-        sell_price = float(data[str(type_id)]["sell"]["percentile"])
-
-        if best_price is None or sell_price < best_price:
-            best_price = sell_price
-
-    buy_price_cache[type_id] = best_price
-    return best_price
+    return {
+        "build": build,
+        "buy": buy,
+        "marginal": marginal
+    }
 
 
 def build_tree(conn, product_name, quantity=1, depth=0, max_depth=10):
@@ -231,9 +241,6 @@ def build_tree(conn, product_name, quantity=1, depth=0, max_depth=10):
         material_qty = row["materialQuantity"] * runs_needed
         material_buildable = is_buildable(conn, material_name)
 
-        buy_price = None
-        line_total = None
-
         material_node = {
             "name": material_name,
             "quantity": material_qty,
@@ -257,40 +264,27 @@ def build_tree(conn, product_name, quantity=1, depth=0, max_depth=10):
                 total_cost += component_total_cost
 
             component_type_id = resolve_type_id(material_name)
-            component_market_price = None
-            component_market_total_price = None
-            if component_type_id:
-                try:
-                    component_market_price = get_buy_price(component_type_id)
-                    if component_market_price is not None:
-                        component_market_total_price = component_market_price * material_qty
-                except Exception:
-                    component_market_price = None
-                    component_market_total_price = None
+            unit_market_price = get_buy_price(component_type_id)
+            market_total_price = unit_market_price * material_qty if unit_market_price is not None else None
 
-            decision = evaluate_build_vs_buy(component_total_cost, component_market_total_price)
-            decision["unit_market_price"] = component_market_price
-            decision["market_total_price"] = component_market_total_price
+            decision = evaluate_build_vs_buy(component_total_cost, market_total_price)
+            decision["unit_market_price"] = unit_market_price
+            decision["market_total_price"] = market_total_price
             material_node.update(decision)
         else:
             type_id = resolve_type_id(material_name)
-            if type_id:
-                try:
-                    buy_price = get_buy_price(type_id)
-                    if buy_price is not None:
-                        line_total = buy_price * material_qty
-                        total_cost += line_total
-                except Exception:
-                    buy_price = None
-                    line_total = None
+            buy_price = get_buy_price(type_id)
+            line_total = buy_price * material_qty if buy_price is not None else None
 
             material_node["buy_price"] = buy_price
             material_node["line_total"] = line_total
 
+            if line_total is not None:
+                total_cost += line_total
+
         node["materials"].append(material_node)
 
     node["total_cost"] = total_cost
-
     return node
 
 
@@ -317,20 +311,20 @@ def build_response(conn, product_name, quantity=1, mode="tree"):
     tree = build_tree(conn, product_name, quantity=quantity)
 
     type_id = resolve_type_id(product_name)
-    market_price = None
+    market_price = get_buy_price(type_id)
+    market_total_price = market_price * quantity if market_price is not None else None
 
-    if type_id:
-        try:
-            market_price = get_buy_price(type_id)
-        except Exception:
-            market_price = None
+    decision = evaluate_build_vs_buy(tree.get("total_cost"), market_total_price)
+    decision["unit_market_price"] = market_price
+    decision["market_total_price"] = market_total_price
 
-    decision = evaluate_build_vs_buy(tree.get("total_cost"), market_price)
+    plan = extract_build_buy_plan(tree)
 
     if mode == "tree":
         return {
             **tree,
-            **decision
+            **decision,
+            "plan": plan
         }
 
     raw_totals = collect_raw_materials(tree)
@@ -344,7 +338,8 @@ def build_response(conn, product_name, quantity=1, mode="tree"):
             "name": product_name,
             "quantity_requested": quantity,
             "raw_materials": raw_list,
-            **decision
+            **decision,
+            "plan": plan
         }
 
     if mode == "both":
@@ -353,19 +348,8 @@ def build_response(conn, product_name, quantity=1, mode="tree"):
             "quantity_requested": quantity,
             "tree": tree,
             "raw_materials": raw_list,
-            **decision
-        }
-
-    return {
-        "error": f"Invalid mode '{mode}'. Use tree, raw, or both."
-    }
-
-    if mode == "both":
-        return {
-            "name": product_name,
-            "quantity_requested": quantity,
-            "tree": tree,
-            "raw_materials": raw_list
+            **decision,
+            "plan": plan
         }
 
     return {
@@ -406,7 +390,6 @@ class handler(BaseHTTPRequestHandler):
             return
 
         try:
-            # BUILD MODE
             if mode in ["tree", "raw", "both"]:
                 if not name:
                     self.send_response(400)
@@ -428,11 +411,19 @@ class handler(BaseHTTPRequestHandler):
                 self.wfile.write(json.dumps(response).encode())
                 return
 
-            # MARKET MODE (unchanged)
+            # MARKET MODE placeholder in canvas version
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
-            self.wfile.write(json.dumps({"status": "market mode placeholder"}).encode())
+            self.wfile.write(json.dumps({
+                "status": "market mode placeholder",
+                "top": top_n,
+                "typeId": type_id,
+                "name": name,
+                "region_name": region_name,
+                "cheapest": check_all,
+                "scan": scan
+            }).encode())
 
         except Exception as e:
             self.send_response(500)
