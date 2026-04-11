@@ -307,6 +307,49 @@ def collect_raw_materials(tree, totals=None):
     return totals
 
 
+def collect_hybrid_requirements(tree, hybrid=None):
+    if hybrid is None:
+        hybrid = {
+            "buy_components": [],
+            "build_components": [],
+            "marginal_components": [],
+            "raw_materials": defaultdict(int)
+        }
+
+    for material in tree.get("materials", []):
+        if material.get("buildable"):
+            entry = {
+                "name": material.get("name"),
+                "quantity": material.get("quantity"),
+                "unit_market_price": material.get("unit_market_price"),
+                "market_total_price": material.get("market_total_price"),
+                "component_total_cost": material.get("components", {}).get("total_cost"),
+                "difference_percent": material.get("difference_percent"),
+                "savings": material.get("savings")
+            }
+
+            decision = material.get("build_vs_buy")
+            if decision == "buy":
+                hybrid["buy_components"].append(entry)
+            elif decision == "build":
+                hybrid["build_components"].append(entry)
+                collect_raw_materials(material.get("components", {}), hybrid["raw_materials"])
+            elif decision == "marginal":
+                hybrid["marginal_components"].append(entry)
+        else:
+            hybrid["raw_materials"][material.get("name")] += material.get("quantity", 0)
+
+    return hybrid
+
+    for material in tree.get("materials", []):
+        if material.get("buildable"):
+            collect_raw_materials(material["components"], totals)
+        else:
+            totals[material["name"]] += material["quantity"]
+
+    return totals
+
+
 def build_response(conn, product_name, quantity=1, mode="tree"):
     tree = build_tree(conn, product_name, quantity=quantity)
 
@@ -319,12 +362,24 @@ def build_response(conn, product_name, quantity=1, mode="tree"):
     decision["market_total_price"] = market_total_price
 
     plan = extract_build_buy_plan(tree)
+    hybrid = collect_hybrid_requirements(tree)
+    hybrid_raw_list = [
+        {"name": name, "quantity": qty}
+        for name, qty in sorted(hybrid["raw_materials"].items())
+    ]
+    hybrid_plan = {
+        "buy_components": hybrid["buy_components"],
+        "build_components": hybrid["build_components"],
+        "marginal_components": hybrid["marginal_components"],
+        "raw_materials": hybrid_raw_list
+    }
 
     if mode == "tree":
         return {
             **tree,
             **decision,
-            "plan": plan
+            "plan": plan,
+            "hybrid_plan": hybrid_plan
         }
 
     raw_totals = collect_raw_materials(tree)
@@ -339,7 +394,8 @@ def build_response(conn, product_name, quantity=1, mode="tree"):
             "quantity_requested": quantity,
             "raw_materials": raw_list,
             **decision,
-            "plan": plan
+            "plan": plan,
+            "hybrid_plan": hybrid_plan
         }
 
     if mode == "both":
@@ -349,7 +405,8 @@ def build_response(conn, product_name, quantity=1, mode="tree"):
             "tree": tree,
             "raw_materials": raw_list,
             **decision,
-            "plan": plan
+            "plan": plan,
+            "hybrid_plan": hybrid_plan
         }
 
     return {
