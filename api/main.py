@@ -1,4 +1,5 @@
 from http.server import BaseHTTPRequestHandler
+
 import json
 import math
 import sqlite3
@@ -492,3 +493,129 @@ class handler(BaseHTTPRequestHandler):
         finally:
             if conn is not None:
                 conn.close()
+
+
+def app(environ, start_response):
+    conn = None
+
+    try:
+        query = parse_qs(environ.get("QUERY_STRING", ""))
+
+        name = query.get("name", [None])[0]
+        if not name:
+            status = "400 Bad Request"
+            body = json.dumps({"error": "Missing required parameter: name"}).encode()
+            headers = [("Content-Type", "application/json"), ("Content-Length", str(len(body)))]
+            start_response(status, headers)
+            return [body]
+
+        quantity = parse_int(query.get("quantity", ["1"])[0], default=1, minimum=1)
+        fit = query.get("fit", [""])[0]
+        me = parse_int(query.get("blueprint_me", ["0"])[0], default=0, minimum=0, maximum=100)
+        pe = parse_int(query.get("production_efficiency", ["0"])[0], default=0, minimum=0, maximum=100)
+        blueprint_te = parse_int(query.get("blueprint_te", ["0"])[0], default=0, minimum=0, maximum=20)
+        industry_skill = parse_int(query.get("industry_skill", ["0"])[0], default=0, minimum=0, maximum=5)
+        advanced_industry_skill = parse_int(query.get("advanced_industry_skill", ["0"])[0], default=0, minimum=0, maximum=5)
+        mass_production_skill = parse_int(query.get("mass_production_skill", ["0"])[0], default=0, minimum=0, maximum=5)
+        advanced_mass_production_skill = parse_int(query.get("advanced_mass_production_skill", ["0"])[0], default=0, minimum=0, maximum=5)
+        supply_chain_management_skill = parse_int(query.get("supply_chain_management_skill", ["0"])[0], default=0, minimum=0, maximum=5)
+        structure_material_bonus = parse_int(query.get("structure_material_bonus", ["0"])[0], default=0, minimum=0, maximum=100)
+        structure_time_bonus = parse_int(query.get("structure_time_bonus", ["0"])[0], default=0, minimum=0, maximum=100)
+        rig_material_bonus = parse_int(query.get("rig_material_bonus", ["0"])[0], default=0, minimum=0, maximum=100)
+        rig_time_bonus = parse_int(query.get("rig_time_bonus", ["0"])[0], default=0, minimum=0, maximum=100)
+
+        conn = get_connection()
+        response = build_response(
+            conn,
+            name,
+            quantity,
+            fit,
+            me,
+            pe,
+            blueprint_te,
+            industry_skill,
+            advanced_industry_skill,
+            mass_production_skill,
+            advanced_mass_production_skill,
+            supply_chain_management_skill,
+            structure_material_bonus,
+            structure_time_bonus,
+            rig_material_bonus,
+            rig_time_bonus
+        )
+
+        body = json.dumps(response).encode()
+        status = "200 OK"
+        headers = [("Content-Type", "application/json"), ("Content-Length", str(len(body)))]
+        start_response(status, headers)
+        return [body]
+    except Exception as e:
+        body = json.dumps({"error": "Internal server error", "details": str(e)}).encode()
+        status = "500 Internal Server Error"
+        headers = [("Content-Type", "application/json"), ("Content-Length", str(len(body)))]
+        start_response(status, headers)
+        return [body]
+    finally:
+        if conn is not None:
+            conn.close()
+
+
+# Vercel entrypoint
+
+def handler(request):
+    try:
+        query = parse_qs(urlparse(request.url).query)
+
+        name = query.get("name", [None])[0]
+        if not name:
+            return {
+                "statusCode": 400,
+                "body": json.dumps({"error": "Missing required parameter: name"})
+            }
+
+        quantity = parse_int(query.get("quantity", ["1"])[0], default=1, minimum=1)
+        fit = query.get("fit", [""])[0]
+        me = parse_int(query.get("blueprint_me", ["0"])[0], default=0, minimum=0, maximum=100)
+        pe = parse_int(query.get("production_efficiency", ["0"])[0], default=0, minimum=0, maximum=100)
+        blueprint_te = parse_int(query.get("blueprint_te", ["0"])[0], default=0, minimum=0, maximum=20)
+        industry_skill = parse_int(query.get("industry_skill", ["0"])[0], default=0, minimum=0, maximum=5)
+        advanced_industry_skill = parse_int(query.get("advanced_industry_skill", ["0"])[0], default=0, minimum=0, maximum=5)
+        mass_production_skill = parse_int(query.get("mass_production_skill", ["0"])[0], default=0, minimum=0, maximum=5)
+        advanced_mass_production_skill = parse_int(query.get("advanced_mass_production_skill", ["0"])[0], default=0, minimum=0, maximum=5)
+        supply_chain_management_skill = parse_int(query.get("supply_chain_management_skill", ["0"])[0], default=0, minimum=0, maximum=5)
+        structure_material_bonus = parse_int(query.get("structure_material_bonus", ["0"])[0], default=0, minimum=0, maximum=100)
+        structure_time_bonus = parse_int(query.get("structure_time_bonus", ["0"])[0], default=0, minimum=0, maximum=100)
+        rig_material_bonus = parse_int(query.get("rig_material_bonus", ["0"])[0], default=0, minimum=0, maximum=100)
+        rig_time_bonus = parse_int(query.get("rig_time_bonus", ["0"])[0], default=0, minimum=0, maximum=100)
+
+        conn = get_connection()
+        response = build_response(
+            conn,
+            name,
+            quantity,
+            fit,
+            me,
+            pe,
+            blueprint_te,
+            industry_skill,
+            advanced_industry_skill,
+            mass_production_skill,
+            advanced_mass_production_skill,
+            supply_chain_management_skill,
+            structure_material_bonus,
+            structure_time_bonus,
+            rig_material_bonus,
+            rig_time_bonus
+        )
+        conn.close()
+
+        return {
+            "statusCode": 200,
+            "body": json.dumps(response)
+        }
+
+    except Exception as e:
+        return {
+            "statusCode": 500,
+            "body": json.dumps({"error": str(e)})
+        }
