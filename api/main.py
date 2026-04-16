@@ -2,6 +2,7 @@ from http.server import BaseHTTPRequestHandler
 import json
 import math
 import sqlite3
+from collections import defaultdict
 from urllib.parse import urlparse, parse_qs
 import requests
 
@@ -196,6 +197,91 @@ def evaluate_build_vs_buy(total_cost, market_price):
     }
 
 
+def extract_build_buy_plan(tree):
+    build = []
+    buy = []
+    marginal = []
+
+    for material in tree.get("materials", []):
+        decision = material.get("build_vs_buy")
+        entry = {
+            "name": material.get("name"),
+            "quantity": material.get("quantity"),
+            "unit_market_price": material.get("unit_market_price"),
+            "market_total_price": material.get("market_total_price"),
+            "component_total_cost": material.get("components", {}).get("total_cost") if material.get("buildable") else None,
+            "difference_percent": material.get("difference_percent"),
+            "savings": material.get("savings")
+        }
+
+        if decision == "build":
+            build.append(entry)
+        elif decision == "buy":
+            buy.append(entry)
+        elif decision == "marginal":
+            marginal.append(entry)
+
+    return {
+        "build": build,
+        "buy": buy,
+        "marginal": marginal
+    }
+
+
+def collect_raw_materials(tree, totals=None):
+    if totals is None:
+        totals = defaultdict(int)
+
+    if not tree.get("buildable", False):
+        qty = tree.get("quantity_requested", 0)
+        if qty:
+            totals[tree["name"]] += qty
+        return totals
+
+    for material in tree.get("materials", []):
+        if material.get("buildable"):
+            collect_raw_materials(material["components"], totals)
+        else:
+            totals[material["name"]] += material["quantity"]
+
+    return totals
+
+
+def collect_hybrid_requirements(tree, hybrid=None):
+    if hybrid is None:
+        hybrid = {
+            "buy_components": [],
+            "build_components": [],
+            "marginal_components": [],
+            "raw_materials": defaultdict(int)
+        }
+
+    for material in tree.get("materials", []):
+        if material.get("buildable"):
+            entry = {
+                "name": material.get("name"),
+                "quantity": material.get("quantity"),
+                "unit_market_price": material.get("unit_market_price"),
+                "market_total_price": material.get("market_total_price"),
+                "component_total_cost": material.get("components", {}).get("total_cost"),
+                "difference_percent": material.get("difference_percent"),
+                "savings": material.get("savings")
+            }
+
+            decision = material.get("build_vs_buy")
+            if decision == "buy":
+                hybrid["buy_components"].append(entry)
+            elif decision == "build":
+                hybrid["build_components"].append(entry)
+                collect_raw_materials(material.get("components", {}), hybrid["raw_materials"])
+            elif decision == "marginal":
+                hybrid["marginal_components"].append(entry)
+        else:
+            hybrid["raw_materials"][material.get("name")] += material.get("quantity", 0)
+
+    return hybrid
+
+
 def get_manufacturing_context(
     blueprint_me=0,
     blueprint_te=0,
@@ -208,7 +294,7 @@ def get_manufacturing_context(
     structure_material_bonus=0,
     structure_time_bonus=0,
     rig_material_bonus=0,
-    rig_time_bonus=0,
+    rig_time_bonus=0
 ):
     blueprint_time_multiplier = max(0, 1 - (blueprint_te * 0.02))
     industry_time_multiplier = max(0, 1 - (industry_skill * 0.04))
@@ -243,7 +329,7 @@ def get_manufacturing_context(
         "rig_time_multiplier": rig_time_multiplier,
         "total_manufacturing_time_multiplier": total_time_multiplier,
         "available_manufacturing_jobs": 1 + mass_production_skill + advanced_mass_production_skill,
-        "remote_job_range_jumps": supply_chain_management_skill * 5,
+        "remote_job_range_jumps": supply_chain_management_skill * 5
     }
 
 
@@ -264,14 +350,14 @@ def build_tree(
     structure_material_bonus=0,
     structure_time_bonus=0,
     rig_material_bonus=0,
-    rig_time_bonus=0,
+    rig_time_bonus=0
 ):
     if depth > max_depth:
         return {
             "name": product_name,
             "quantity_requested": quantity,
             "buildable": False,
-            "error": "Max depth reached",
+            "error": "Max depth reached"
         }
 
     rows = get_blueprint_and_materials(conn, product_name)
@@ -287,7 +373,7 @@ def build_tree(
             "materials": [],
             "buy_price": buy_price,
             "line_total": total_cost,
-            "total_cost": total_cost,
+            "total_cost": total_cost
         }
 
     first = rows[0]
@@ -301,7 +387,7 @@ def build_tree(
         "quantity_requested": quantity,
         "runs_needed": runs_needed,
         "buildable": True,
-        "materials": [],
+        "materials": []
     }
 
     total_cost = 0
@@ -310,7 +396,6 @@ def build_tree(
         material_name = row["materialName"]
         base_qty = row["materialQuantity"] * runs_needed
         material_qty = apply_material_modifiers(base_qty, me, pe, structure_material_bonus, rig_material_bonus)
-
         material_buildable = is_buildable(conn, material_name)
 
         material_node = {
@@ -318,7 +403,7 @@ def build_tree(
             "quantity": material_qty,
             "buildable": material_buildable,
             "buy_price": None,
-            "line_total": None,
+            "line_total": None
         }
 
         if material_buildable:
@@ -339,7 +424,7 @@ def build_tree(
                 structure_material_bonus=structure_material_bonus,
                 structure_time_bonus=structure_time_bonus,
                 rig_material_bonus=rig_material_bonus,
-                rig_time_bonus=rig_time_bonus,
+                rig_time_bonus=rig_time_bonus
             )
             material_node["components"] = component
 
@@ -389,6 +474,7 @@ def build_response(
     conn,
     product_name,
     quantity=1,
+    mode="tree",
     fit_text="",
     me=0,
     pe=0,
@@ -401,12 +487,12 @@ def build_response(
     structure_material_bonus=0,
     structure_time_bonus=0,
     rig_material_bonus=0,
-    rig_time_bonus=0,
+    rig_time_bonus=0
 ):
     tree = build_tree(
         conn,
         product_name,
-        quantity,
+        quantity=quantity,
         me=me,
         pe=pe,
         blueprint_te=blueprint_te,
@@ -418,7 +504,7 @@ def build_response(
         structure_material_bonus=structure_material_bonus,
         structure_time_bonus=structure_time_bonus,
         rig_material_bonus=rig_material_bonus,
-        rig_time_bonus=rig_time_bonus,
+        rig_time_bonus=rig_time_bonus
     )
 
     tree["inputs"] = get_manufacturing_context(
@@ -433,7 +519,7 @@ def build_response(
         structure_material_bonus=structure_material_bonus,
         structure_time_bonus=structure_time_bonus,
         rig_material_bonus=rig_material_bonus,
-        rig_time_bonus=rig_time_bonus,
+        rig_time_bonus=rig_time_bonus
     )
 
     fit_items = parse_fit(fit_text)
@@ -453,7 +539,7 @@ def build_response(
             structure_material_bonus=structure_material_bonus,
             structure_time_bonus=structure_time_bonus,
             rig_material_bonus=rig_material_bonus,
-            rig_time_bonus=rig_time_bonus,
+            rig_time_bonus=rig_time_bonus
         )
         fit_node = {
             "name": sub.get("name", item),
@@ -462,14 +548,74 @@ def build_response(
             "buy_price": sub.get("buy_price"),
             "line_total": sub.get("line_total"),
             "selected_total_cost": sub.get("total_cost"),
-            "components": sub,
+            "components": sub
         }
         tree["materials"].append(fit_node)
 
         if sub.get("total_cost") is not None:
             tree["total_cost"] += sub["total_cost"]
 
-    return tree
+    type_id = resolve_type_id(product_name)
+    market_price = get_buy_price(type_id)
+    market_total_price = market_price * quantity if market_price is not None else None
+
+    decision = evaluate_build_vs_buy(tree.get("total_cost"), market_total_price)
+    decision["unit_market_price"] = market_price
+    decision["market_total_price"] = market_total_price
+
+    plan = extract_build_buy_plan(tree)
+    hybrid = collect_hybrid_requirements(tree)
+    hybrid_raw_list = [
+        {"name": name, "quantity": qty}
+        for name, qty in sorted(hybrid["raw_materials"].items())
+    ]
+    hybrid_plan = {
+        "buy_components": hybrid["buy_components"],
+        "build_components": hybrid["build_components"],
+        "marginal_components": hybrid["marginal_components"],
+        "raw_materials": hybrid_raw_list
+    }
+
+    if mode == "tree":
+        return {
+            **tree,
+            **decision,
+            "plan": plan,
+            "hybrid_plan": hybrid_plan
+        }
+
+    raw_totals = collect_raw_materials(tree)
+    raw_list = [
+        {"name": name, "quantity": qty}
+        for name, qty in sorted(raw_totals.items())
+    ]
+
+    if mode == "raw":
+        return {
+            "name": product_name,
+            "quantity_requested": quantity,
+            "raw_materials": raw_list,
+            **decision,
+            "plan": plan,
+            "hybrid_plan": hybrid_plan,
+            "inputs": tree.get("inputs")
+        }
+
+    if mode == "both":
+        return {
+            "name": product_name,
+            "quantity_requested": quantity,
+            "tree": tree,
+            "raw_materials": raw_list,
+            **decision,
+            "plan": plan,
+            "hybrid_plan": hybrid_plan,
+            "inputs": tree.get("inputs")
+        }
+
+    return {
+        "error": f"Invalid mode '{mode}'. Use tree, raw, or both."
+    }
 
 
 def parse_int(value, default=0, minimum=None, maximum=None):
@@ -487,87 +633,16 @@ def parse_int(value, default=0, minimum=None, maximum=None):
     return parsed
 
 
-class LegacyHandler(BaseHTTPRequestHandler):
+class handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        conn = None
+        query = parse_qs(urlparse(self.path).query)
 
-        try:
-            query = parse_qs(urlparse(self.path).query)
-
-            name = query.get("name", [None])[0]
-            if not name:
-                self.send_response(400)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(json.dumps({"error": "Missing required parameter: name"}).encode())
-                return
-
-            quantity = parse_int(query.get("quantity", ["1"])[0], default=1, minimum=1)
-            fit = query.get("fit", [""])[0]
-            me = parse_int(query.get("blueprint_me", ["0"])[0], default=0, minimum=0, maximum=100)
-            pe = parse_int(query.get("production_efficiency", ["0"])[0], default=0, minimum=0, maximum=100)
-            blueprint_te = parse_int(query.get("blueprint_te", ["0"])[0], default=0, minimum=0, maximum=20)
-            industry_skill = parse_int(query.get("industry_skill", ["0"])[0], default=0, minimum=0, maximum=5)
-            advanced_industry_skill = parse_int(query.get("advanced_industry_skill", ["0"])[0], default=0, minimum=0, maximum=5)
-            mass_production_skill = parse_int(query.get("mass_production_skill", ["0"])[0], default=0, minimum=0, maximum=5)
-            advanced_mass_production_skill = parse_int(query.get("advanced_mass_production_skill", ["0"])[0], default=0, minimum=0, maximum=5)
-            supply_chain_management_skill = parse_int(query.get("supply_chain_management_skill", ["0"])[0], default=0, minimum=0, maximum=5)
-            structure_material_bonus = parse_int(query.get("structure_material_bonus", ["0"])[0], default=0, minimum=0, maximum=100)
-            structure_time_bonus = parse_int(query.get("structure_time_bonus", ["0"])[0], default=0, minimum=0, maximum=100)
-            rig_material_bonus = parse_int(query.get("rig_material_bonus", ["0"])[0], default=0, minimum=0, maximum=100)
-            rig_time_bonus = parse_int(query.get("rig_time_bonus", ["0"])[0], default=0, minimum=0, maximum=100)
-
-            conn = get_connection()
-            response = build_response(
-                conn,
-                name,
-                quantity,
-                fit,
-                me,
-                pe,
-                blueprint_te,
-                industry_skill,
-                advanced_industry_skill,
-                mass_production_skill,
-                advanced_mass_production_skill,
-                supply_chain_management_skill,
-                structure_material_bonus,
-                structure_time_bonus,
-                rig_material_bonus,
-                rig_time_bonus,
-            )
-
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps(response).encode())
-        except Exception as e:
-            self.send_response(500)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps({"error": "Internal server error", "details": str(e)}).encode())
-        finally:
-            if conn is not None:
-                conn.close()
-
-
-# WSGI entrypoint for deployment
-
-def app(environ, start_response):
-    conn = None
-
-    try:
-        query = parse_qs(environ.get("QUERY_STRING", ""))
-
+        mode = query.get("mode", [None])[0]
+        type_id = query.get("typeId", [None])[0]
         name = query.get("name", [None])[0]
-        if not name:
-            status = "400 Bad Request"
-            body = json.dumps({"error": "Missing required parameter: name"}).encode()
-            headers = [("Content-Type", "application/json"), ("Content-Length", str(len(body)))]
-            start_response(status, headers)
-            return [body]
-
-        quantity = parse_int(query.get("quantity", ["1"])[0], default=1, minimum=1)
+        region_name = query.get("region_name", [None])[0]
+        check_all = query.get("cheapest", [None])[0]
+        scan = query.get("scan", [None])[0]
         fit = query.get("fit", [""])[0]
         me = parse_int(query.get("blueprint_me", ["0"])[0], default=0, minimum=0, maximum=100)
         pe = parse_int(query.get("production_efficiency", ["0"])[0], default=0, minimum=0, maximum=100)
@@ -582,37 +657,84 @@ def app(environ, start_response):
         rig_material_bonus = parse_int(query.get("rig_material_bonus", ["0"])[0], default=0, minimum=0, maximum=100)
         rig_time_bonus = parse_int(query.get("rig_time_bonus", ["0"])[0], default=0, minimum=0, maximum=100)
 
-        conn = get_connection()
-        response = build_response(
-            conn,
-            name,
-            quantity,
-            fit,
-            me,
-            pe,
-            blueprint_te,
-            industry_skill,
-            advanced_industry_skill,
-            mass_production_skill,
-            advanced_mass_production_skill,
-            supply_chain_management_skill,
-            structure_material_bonus,
-            structure_time_bonus,
-            rig_material_bonus,
-            rig_time_bonus,
-        )
+        if mode:
+            mode = mode.strip().lower()
 
-        body = json.dumps(response).encode()
-        status = "200 OK"
-        headers = [("Content-Type", "application/json"), ("Content-Length", str(len(body)))]
-        start_response(status, headers)
-        return [body]
-    except Exception as e:
-        body = json.dumps({"error": "Internal server error", "details": str(e)}).encode()
-        status = "500 Internal Server Error"
-        headers = [("Content-Type", "application/json"), ("Content-Length", str(len(body)))]
-        start_response(status, headers)
-        return [body]
-    finally:
-        if conn is not None:
-            conn.close()
+        try:
+            top_n = int(query.get("top", ["10"])[0])
+        except ValueError:
+            top_n = 10
+
+        try:
+            quantity = int(query.get("quantity", ["1"])[0])
+            if quantity < 1:
+                raise ValueError
+        except ValueError:
+            self.send_response(400)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "error": "quantity must be a positive integer"
+            }).encode())
+            return
+
+        try:
+            if mode in ["tree", "raw", "both"]:
+                if not name:
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({
+                        "error": "Provide name for build mode"
+                    }).encode())
+                    return
+
+                conn = get_connection()
+                response = build_response(
+                    conn,
+                    name,
+                    quantity=quantity,
+                    mode=mode,
+                    fit_text=fit,
+                    me=me,
+                    pe=pe,
+                    blueprint_te=blueprint_te,
+                    industry_skill=industry_skill,
+                    advanced_industry_skill=advanced_industry_skill,
+                    mass_production_skill=mass_production_skill,
+                    advanced_mass_production_skill=advanced_mass_production_skill,
+                    supply_chain_management_skill=supply_chain_management_skill,
+                    structure_material_bonus=structure_material_bonus,
+                    structure_time_bonus=structure_time_bonus,
+                    rig_material_bonus=rig_material_bonus,
+                    rig_time_bonus=rig_time_bonus
+                )
+                conn.close()
+
+                status = 200 if "error" not in response else 400
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps(response).encode())
+                return
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "status": "market mode placeholder",
+                "top": top_n,
+                "typeId": type_id,
+                "name": name,
+                "region_name": region_name,
+                "cheapest": check_all,
+                "scan": scan
+            }).encode())
+
+        except Exception as e:
+            self.send_response(500)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "error": str(e)
+            }).encode())
