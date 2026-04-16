@@ -1,9 +1,7 @@
 from http.server import BaseHTTPRequestHandler
-
 import json
 import math
 import sqlite3
-from collections import defaultdict
 from urllib.parse import urlparse, parse_qs
 import requests
 
@@ -198,13 +196,32 @@ def evaluate_build_vs_buy(total_cost, market_price):
     }
 
 
-def get_manufacturing_context(blueprint_me=0, blueprint_te=0, production_efficiency=0, industry_skill=0, advanced_industry_skill=0, mass_production_skill=0, advanced_mass_production_skill=0, supply_chain_management_skill=0, structure_material_bonus=0, structure_time_bonus=0, rig_material_bonus=0, rig_time_bonus=0):
+def get_manufacturing_context(
+    blueprint_me=0,
+    blueprint_te=0,
+    production_efficiency=0,
+    industry_skill=0,
+    advanced_industry_skill=0,
+    mass_production_skill=0,
+    advanced_mass_production_skill=0,
+    supply_chain_management_skill=0,
+    structure_material_bonus=0,
+    structure_time_bonus=0,
+    rig_material_bonus=0,
+    rig_time_bonus=0,
+):
     blueprint_time_multiplier = max(0, 1 - (blueprint_te * 0.02))
     industry_time_multiplier = max(0, 1 - (industry_skill * 0.04))
     advanced_industry_time_multiplier = max(0, 1 - (advanced_industry_skill * 0.03))
     structure_time_multiplier = max(0, 1 - (structure_time_bonus / 100))
     rig_time_multiplier = max(0, 1 - (rig_time_bonus / 100))
-    total_time_multiplier = blueprint_time_multiplier * industry_time_multiplier * advanced_industry_time_multiplier * structure_time_multiplier * rig_time_multiplier
+    total_time_multiplier = (
+        blueprint_time_multiplier
+        * industry_time_multiplier
+        * advanced_industry_time_multiplier
+        * structure_time_multiplier
+        * rig_time_multiplier
+    )
 
     return {
         "blueprint_me": blueprint_me,
@@ -226,17 +243,35 @@ def get_manufacturing_context(blueprint_me=0, blueprint_te=0, production_efficie
         "rig_time_multiplier": rig_time_multiplier,
         "total_manufacturing_time_multiplier": total_time_multiplier,
         "available_manufacturing_jobs": 1 + mass_production_skill + advanced_mass_production_skill,
-        "remote_job_range_jumps": supply_chain_management_skill * 5
+        "remote_job_range_jumps": supply_chain_management_skill * 5,
     }
 
 
-def build_tree(conn, product_name, quantity=1, depth=0, max_depth=10, me=0, pe=0, blueprint_te=0, industry_skill=0, advanced_industry_skill=0, mass_production_skill=0, advanced_mass_production_skill=0, supply_chain_management_skill=0, structure_material_bonus=0, structure_time_bonus=0, rig_material_bonus=0, rig_time_bonus=0):
+def build_tree(
+    conn,
+    product_name,
+    quantity=1,
+    depth=0,
+    max_depth=10,
+    me=0,
+    pe=0,
+    blueprint_te=0,
+    industry_skill=0,
+    advanced_industry_skill=0,
+    mass_production_skill=0,
+    advanced_mass_production_skill=0,
+    supply_chain_management_skill=0,
+    structure_material_bonus=0,
+    structure_time_bonus=0,
+    rig_material_bonus=0,
+    rig_time_bonus=0,
+):
     if depth > max_depth:
         return {
             "name": product_name,
             "quantity_requested": quantity,
             "buildable": False,
-            "error": "Max depth reached"
+            "error": "Max depth reached",
         }
 
     rows = get_blueprint_and_materials(conn, product_name)
@@ -252,7 +287,7 @@ def build_tree(conn, product_name, quantity=1, depth=0, max_depth=10, me=0, pe=0
             "materials": [],
             "buy_price": buy_price,
             "line_total": total_cost,
-            "total_cost": total_cost
+            "total_cost": total_cost,
         }
 
     first = rows[0]
@@ -266,7 +301,7 @@ def build_tree(conn, product_name, quantity=1, depth=0, max_depth=10, me=0, pe=0
         "quantity_requested": quantity,
         "runs_needed": runs_needed,
         "buildable": True,
-        "materials": []
+        "materials": [],
     }
 
     total_cost = 0
@@ -283,7 +318,7 @@ def build_tree(conn, product_name, quantity=1, depth=0, max_depth=10, me=0, pe=0
             "quantity": material_qty,
             "buildable": material_buildable,
             "buy_price": None,
-            "line_total": None
+            "line_total": None,
         }
 
         if material_buildable:
@@ -304,7 +339,7 @@ def build_tree(conn, product_name, quantity=1, depth=0, max_depth=10, me=0, pe=0
                 structure_material_bonus=structure_material_bonus,
                 structure_time_bonus=structure_time_bonus,
                 rig_material_bonus=rig_material_bonus,
-                rig_time_bonus=rig_time_bonus
+                rig_time_bonus=rig_time_bonus,
             )
             material_node["components"] = component
 
@@ -321,7 +356,11 @@ def build_tree(conn, product_name, quantity=1, depth=0, max_depth=10, me=0, pe=0
             selected_total_cost = component_total_cost
             if decision["build_vs_buy"] == "buy" and market_total_price is not None:
                 selected_total_cost = market_total_price
-            elif decision["build_vs_buy"] == "marginal" and market_total_price is not None and component_total_cost is not None:
+            elif (
+                decision["build_vs_buy"] == "marginal"
+                and market_total_price is not None
+                and component_total_cost is not None
+            ):
                 selected_total_cost = min(component_total_cost, market_total_price)
 
             material_node["selected_total_cost"] = selected_total_cost
@@ -346,7 +385,24 @@ def build_tree(conn, product_name, quantity=1, depth=0, max_depth=10, me=0, pe=0
     return node
 
 
-def build_response(conn, product_name, quantity=1, fit_text="", me=0, pe=0, blueprint_te=0, industry_skill=0, advanced_industry_skill=0, mass_production_skill=0, advanced_mass_production_skill=0, supply_chain_management_skill=0, structure_material_bonus=0, structure_time_bonus=0, rig_material_bonus=0, rig_time_bonus=0):
+def build_response(
+    conn,
+    product_name,
+    quantity=1,
+    fit_text="",
+    me=0,
+    pe=0,
+    blueprint_te=0,
+    industry_skill=0,
+    advanced_industry_skill=0,
+    mass_production_skill=0,
+    advanced_mass_production_skill=0,
+    supply_chain_management_skill=0,
+    structure_material_bonus=0,
+    structure_time_bonus=0,
+    rig_material_bonus=0,
+    rig_time_bonus=0,
+):
     tree = build_tree(
         conn,
         product_name,
@@ -362,7 +418,7 @@ def build_response(conn, product_name, quantity=1, fit_text="", me=0, pe=0, blue
         structure_material_bonus=structure_material_bonus,
         structure_time_bonus=structure_time_bonus,
         rig_material_bonus=rig_material_bonus,
-        rig_time_bonus=rig_time_bonus
+        rig_time_bonus=rig_time_bonus,
     )
 
     tree["inputs"] = get_manufacturing_context(
@@ -377,7 +433,7 @@ def build_response(conn, product_name, quantity=1, fit_text="", me=0, pe=0, blue
         structure_material_bonus=structure_material_bonus,
         structure_time_bonus=structure_time_bonus,
         rig_material_bonus=rig_material_bonus,
-        rig_time_bonus=rig_time_bonus
+        rig_time_bonus=rig_time_bonus,
     )
 
     fit_items = parse_fit(fit_text)
@@ -397,7 +453,7 @@ def build_response(conn, product_name, quantity=1, fit_text="", me=0, pe=0, blue
             structure_material_bonus=structure_material_bonus,
             structure_time_bonus=structure_time_bonus,
             rig_material_bonus=rig_material_bonus,
-            rig_time_bonus=rig_time_bonus
+            rig_time_bonus=rig_time_bonus,
         )
         fit_node = {
             "name": sub.get("name", item),
@@ -406,7 +462,7 @@ def build_response(conn, product_name, quantity=1, fit_text="", me=0, pe=0, blue
             "buy_price": sub.get("buy_price"),
             "line_total": sub.get("line_total"),
             "selected_total_cost": sub.get("total_cost"),
-            "components": sub
+            "components": sub,
         }
         tree["materials"].append(fit_node)
 
@@ -431,7 +487,7 @@ def parse_int(value, default=0, minimum=None, maximum=None):
     return parsed
 
 
-class handler(BaseHTTPRequestHandler):
+class LegacyHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         conn = None
 
@@ -478,7 +534,7 @@ class handler(BaseHTTPRequestHandler):
                 structure_material_bonus,
                 structure_time_bonus,
                 rig_material_bonus,
-                rig_time_bonus
+                rig_time_bonus,
             )
 
             self.send_response(200)
@@ -494,6 +550,8 @@ class handler(BaseHTTPRequestHandler):
             if conn is not None:
                 conn.close()
 
+
+# WSGI entrypoint for deployment
 
 def app(environ, start_response):
     conn = None
@@ -541,7 +599,7 @@ def app(environ, start_response):
             structure_material_bonus,
             structure_time_bonus,
             rig_material_bonus,
-            rig_time_bonus
+            rig_time_bonus,
         )
 
         body = json.dumps(response).encode()
@@ -558,64 +616,3 @@ def app(environ, start_response):
     finally:
         if conn is not None:
             conn.close()
-
-
-# Vercel entrypoint
-
-def handler(request):
-    try:
-        query = parse_qs(urlparse(request.url).query)
-
-        name = query.get("name", [None])[0]
-        if not name:
-            return {
-                "statusCode": 400,
-                "body": json.dumps({"error": "Missing required parameter: name"})
-            }
-
-        quantity = parse_int(query.get("quantity", ["1"])[0], default=1, minimum=1)
-        fit = query.get("fit", [""])[0]
-        me = parse_int(query.get("blueprint_me", ["0"])[0], default=0, minimum=0, maximum=100)
-        pe = parse_int(query.get("production_efficiency", ["0"])[0], default=0, minimum=0, maximum=100)
-        blueprint_te = parse_int(query.get("blueprint_te", ["0"])[0], default=0, minimum=0, maximum=20)
-        industry_skill = parse_int(query.get("industry_skill", ["0"])[0], default=0, minimum=0, maximum=5)
-        advanced_industry_skill = parse_int(query.get("advanced_industry_skill", ["0"])[0], default=0, minimum=0, maximum=5)
-        mass_production_skill = parse_int(query.get("mass_production_skill", ["0"])[0], default=0, minimum=0, maximum=5)
-        advanced_mass_production_skill = parse_int(query.get("advanced_mass_production_skill", ["0"])[0], default=0, minimum=0, maximum=5)
-        supply_chain_management_skill = parse_int(query.get("supply_chain_management_skill", ["0"])[0], default=0, minimum=0, maximum=5)
-        structure_material_bonus = parse_int(query.get("structure_material_bonus", ["0"])[0], default=0, minimum=0, maximum=100)
-        structure_time_bonus = parse_int(query.get("structure_time_bonus", ["0"])[0], default=0, minimum=0, maximum=100)
-        rig_material_bonus = parse_int(query.get("rig_material_bonus", ["0"])[0], default=0, minimum=0, maximum=100)
-        rig_time_bonus = parse_int(query.get("rig_time_bonus", ["0"])[0], default=0, minimum=0, maximum=100)
-
-        conn = get_connection()
-        response = build_response(
-            conn,
-            name,
-            quantity,
-            fit,
-            me,
-            pe,
-            blueprint_te,
-            industry_skill,
-            advanced_industry_skill,
-            mass_production_skill,
-            advanced_mass_production_skill,
-            supply_chain_management_skill,
-            structure_material_bonus,
-            structure_time_bonus,
-            rig_material_bonus,
-            rig_time_bonus
-        )
-        conn.close()
-
-        return {
-            "statusCode": 200,
-            "body": json.dumps(response)
-        }
-
-    except Exception as e:
-        return {
-            "statusCode": 500,
-            "body": json.dumps({"error": str(e)})
-        }
