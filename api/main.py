@@ -29,14 +29,12 @@ def get_connection():
     return conn
 
 
-# -------- FIT PARSER --------
 def parse_fit(fit_text):
     if not fit_text:
         return []
 
     items = []
-    for line in fit_text.split("
-"):
+    for line in fit_text.split("\n"):
         line = line.strip()
         if not line or line.startswith("["):
             continue
@@ -47,7 +45,6 @@ def parse_fit(fit_text):
     return items
 
 
-# -------- MATERIAL MODIFIER --------
 def apply_material_modifiers(qty, me, pe, structure_material_bonus=0, rig_material_bonus=0):
     reduction = (me / 100) + (pe * 0.01) + (structure_material_bonus / 100) + (rig_material_bonus / 100)
     reduction = max(0, min(1, reduction))
@@ -228,111 +225,6 @@ def extract_build_buy_plan(tree):
     }
 
 
-def collect_raw_materials(tree, totals=None):
-    if totals is None:
-        totals = defaultdict(int)
-
-    if not tree.get("buildable", False):
-        qty = tree.get("quantity_requested", 0)
-        if qty:
-            totals[tree["name"]] += qty
-        return totals
-
-    for material in tree.get("materials", []):
-        if material.get("buildable"):
-            collect_raw_materials(material["components"], totals)
-        else:
-            totals[material["name"]] += material["quantity"]
-
-    return totals
-
-
-def collect_hybrid_requirements(tree, hybrid=None):
-    if hybrid is None:
-        hybrid = {
-            "buy_components": [],
-            "build_components": [],
-            "marginal_components": [],
-            "raw_materials": defaultdict(int)
-        }
-
-    for material in tree.get("materials", []):
-        if material.get("buildable"):
-            entry = {
-                "name": material.get("name"),
-                "quantity": material.get("quantity"),
-                "unit_market_price": material.get("unit_market_price"),
-                "market_total_price": material.get("market_total_price"),
-                "component_total_cost": material.get("components", {}).get("total_cost"),
-                "difference_percent": material.get("difference_percent"),
-                "savings": material.get("savings")
-            }
-
-            decision = material.get("build_vs_buy")
-            if decision == "buy":
-                hybrid["buy_components"].append(entry)
-            elif decision == "build":
-                hybrid["build_components"].append(entry)
-                collect_raw_materials(material.get("components", {}), hybrid["raw_materials"])
-            elif decision == "marginal":
-                hybrid["marginal_components"].append(entry)
-        else:
-            hybrid["raw_materials"][material.get("name")] += material.get("quantity", 0)
-
-    return hybrid
-
-
-def get_manufacturing_context(
-    blueprint_me=0,
-    blueprint_te=0,
-    production_efficiency=0,
-    industry_skill=0,
-    advanced_industry_skill=0,
-    mass_production_skill=0,
-    advanced_mass_production_skill=0,
-    supply_chain_management_skill=0,
-    structure_material_bonus=0,
-    structure_time_bonus=0,
-    rig_material_bonus=0,
-    rig_time_bonus=0
-):
-    blueprint_time_multiplier = max(0, 1 - (blueprint_te * 0.02))
-    industry_time_multiplier = max(0, 1 - (industry_skill * 0.04))
-    advanced_industry_time_multiplier = max(0, 1 - (advanced_industry_skill * 0.03))
-    structure_time_multiplier = max(0, 1 - (structure_time_bonus / 100))
-    rig_time_multiplier = max(0, 1 - (rig_time_bonus / 100))
-    total_time_multiplier = (
-        blueprint_time_multiplier
-        * industry_time_multiplier
-        * advanced_industry_time_multiplier
-        * structure_time_multiplier
-        * rig_time_multiplier
-    )
-
-    return {
-        "blueprint_me": blueprint_me,
-        "blueprint_te": blueprint_te,
-        "production_efficiency": production_efficiency,
-        "industry_skill": industry_skill,
-        "advanced_industry_skill": advanced_industry_skill,
-        "mass_production_skill": mass_production_skill,
-        "advanced_mass_production_skill": advanced_mass_production_skill,
-        "supply_chain_management_skill": supply_chain_management_skill,
-        "structure_material_bonus": structure_material_bonus,
-        "structure_time_bonus": structure_time_bonus,
-        "rig_material_bonus": rig_material_bonus,
-        "rig_time_bonus": rig_time_bonus,
-        "blueprint_time_multiplier": blueprint_time_multiplier,
-        "industry_time_multiplier": industry_time_multiplier,
-        "advanced_industry_time_multiplier": advanced_industry_time_multiplier,
-        "structure_time_multiplier": structure_time_multiplier,
-        "rig_time_multiplier": rig_time_multiplier,
-        "total_manufacturing_time_multiplier": total_time_multiplier,
-        "available_manufacturing_jobs": 1 + mass_production_skill + advanced_mass_production_skill,
-        "remote_job_range_jumps": supply_chain_management_skill * 5
-    }
-
-
 def build_tree(
     conn,
     product_name,
@@ -441,11 +333,7 @@ def build_tree(
             selected_total_cost = component_total_cost
             if decision["build_vs_buy"] == "buy" and market_total_price is not None:
                 selected_total_cost = market_total_price
-            elif (
-                decision["build_vs_buy"] == "marginal"
-                and market_total_price is not None
-                and component_total_cost is not None
-            ):
+            elif decision["build_vs_buy"] == "marginal" and market_total_price is not None and component_total_cost is not None:
                 selected_total_cost = min(component_total_cost, market_total_price)
 
             material_node["selected_total_cost"] = selected_total_cost
@@ -468,6 +356,111 @@ def build_tree(
 
     node["total_cost"] = total_cost
     return node
+
+
+def collect_raw_materials(tree, totals=None):
+    if totals is None:
+        totals = defaultdict(int)
+
+    if not tree.get("buildable", False):
+        qty = tree.get("quantity_requested", 0)
+        if qty:
+            totals[tree["name"]] += qty
+        return totals
+
+    for material in tree.get("materials", []):
+        if material.get("buildable"):
+            collect_raw_materials(material["components"], totals)
+        else:
+            totals[material["name"]] += material["quantity"]
+
+    return totals
+
+
+def collect_hybrid_requirements(tree, hybrid=None):
+    if hybrid is None:
+        hybrid = {
+            "buy_components": [],
+            "build_components": [],
+            "marginal_components": [],
+            "raw_materials": defaultdict(int)
+        }
+
+    for material in tree.get("materials", []):
+        if material.get("buildable"):
+            entry = {
+                "name": material.get("name"),
+                "quantity": material.get("quantity"),
+                "unit_market_price": material.get("unit_market_price"),
+                "market_total_price": material.get("market_total_price"),
+                "component_total_cost": material.get("components", {}).get("total_cost"),
+                "difference_percent": material.get("difference_percent"),
+                "savings": material.get("savings")
+            }
+
+            decision = material.get("build_vs_buy")
+            if decision == "buy":
+                hybrid["buy_components"].append(entry)
+            elif decision == "build":
+                hybrid["build_components"].append(entry)
+                collect_raw_materials(material.get("components", {}), hybrid["raw_materials"])
+            elif decision == "marginal":
+                hybrid["marginal_components"].append(entry)
+        else:
+            hybrid["raw_materials"][material.get("name")] += material.get("quantity", 0)
+
+    return hybrid
+
+
+def get_manufacturing_context(
+    blueprint_me=0,
+    blueprint_te=0,
+    production_efficiency=0,
+    industry_skill=0,
+    advanced_industry_skill=0,
+    mass_production_skill=0,
+    advanced_mass_production_skill=0,
+    supply_chain_management_skill=0,
+    structure_material_bonus=0,
+    structure_time_bonus=0,
+    rig_material_bonus=0,
+    rig_time_bonus=0
+):
+    blueprint_time_multiplier = max(0, 1 - (blueprint_te * 0.02))
+    industry_time_multiplier = max(0, 1 - (industry_skill * 0.04))
+    advanced_industry_time_multiplier = max(0, 1 - (advanced_industry_skill * 0.03))
+    structure_time_multiplier = max(0, 1 - (structure_time_bonus / 100))
+    rig_time_multiplier = max(0, 1 - (rig_time_bonus / 100))
+    total_time_multiplier = (
+        blueprint_time_multiplier
+        * industry_time_multiplier
+        * advanced_industry_time_multiplier
+        * structure_time_multiplier
+        * rig_time_multiplier
+    )
+
+    return {
+        "blueprint_me": blueprint_me,
+        "blueprint_te": blueprint_te,
+        "production_efficiency": production_efficiency,
+        "industry_skill": industry_skill,
+        "advanced_industry_skill": advanced_industry_skill,
+        "mass_production_skill": mass_production_skill,
+        "advanced_mass_production_skill": advanced_mass_production_skill,
+        "supply_chain_management_skill": supply_chain_management_skill,
+        "structure_material_bonus": structure_material_bonus,
+        "structure_time_bonus": structure_time_bonus,
+        "rig_material_bonus": rig_material_bonus,
+        "rig_time_bonus": rig_time_bonus,
+        "blueprint_time_multiplier": blueprint_time_multiplier,
+        "industry_time_multiplier": industry_time_multiplier,
+        "advanced_industry_time_multiplier": advanced_industry_time_multiplier,
+        "structure_time_multiplier": structure_time_multiplier,
+        "rig_time_multiplier": rig_time_multiplier,
+        "total_manufacturing_time_multiplier": total_time_multiplier,
+        "available_manufacturing_jobs": 1 + mass_production_skill + advanced_mass_production_skill,
+        "remote_job_range_jumps": supply_chain_management_skill * 5
+    }
 
 
 def build_response(
@@ -541,17 +534,7 @@ def build_response(
             rig_material_bonus=rig_material_bonus,
             rig_time_bonus=rig_time_bonus
         )
-        fit_node = {
-            "name": sub.get("name", item),
-            "quantity": quantity,
-            "buildable": sub.get("buildable", False),
-            "buy_price": sub.get("buy_price"),
-            "line_total": sub.get("line_total"),
-            "selected_total_cost": sub.get("total_cost"),
-            "components": sub
-        }
-        tree["materials"].append(fit_node)
-
+        tree.setdefault("fit_items", []).append(sub)
         if sub.get("total_cost") is not None:
             tree["total_cost"] += sub["total_cost"]
 
@@ -598,7 +581,8 @@ def build_response(
             **decision,
             "plan": plan,
             "hybrid_plan": hybrid_plan,
-            "inputs": tree.get("inputs")
+            "inputs": tree.get("inputs"),
+            "fit_items": tree.get("fit_items", [])
         }
 
     if mode == "both":
@@ -610,27 +594,13 @@ def build_response(
             **decision,
             "plan": plan,
             "hybrid_plan": hybrid_plan,
-            "inputs": tree.get("inputs")
+            "inputs": tree.get("inputs"),
+            "fit_items": tree.get("fit_items", [])
         }
 
     return {
         "error": f"Invalid mode '{mode}'. Use tree, raw, or both."
     }
-
-
-def parse_int(value, default=0, minimum=None, maximum=None):
-    try:
-        parsed = int(value)
-    except (TypeError, ValueError):
-        parsed = default
-
-    if minimum is not None and parsed < minimum:
-        parsed = minimum
-
-    if maximum is not None and parsed > maximum:
-        parsed = maximum
-
-    return parsed
 
 
 class handler(BaseHTTPRequestHandler):
@@ -644,18 +614,6 @@ class handler(BaseHTTPRequestHandler):
         check_all = query.get("cheapest", [None])[0]
         scan = query.get("scan", [None])[0]
         fit = query.get("fit", [""])[0]
-        me = parse_int(query.get("blueprint_me", ["0"])[0], default=0, minimum=0, maximum=100)
-        pe = parse_int(query.get("production_efficiency", ["0"])[0], default=0, minimum=0, maximum=100)
-        blueprint_te = parse_int(query.get("blueprint_te", ["0"])[0], default=0, minimum=0, maximum=20)
-        industry_skill = parse_int(query.get("industry_skill", ["0"])[0], default=0, minimum=0, maximum=5)
-        advanced_industry_skill = parse_int(query.get("advanced_industry_skill", ["0"])[0], default=0, minimum=0, maximum=5)
-        mass_production_skill = parse_int(query.get("mass_production_skill", ["0"])[0], default=0, minimum=0, maximum=5)
-        advanced_mass_production_skill = parse_int(query.get("advanced_mass_production_skill", ["0"])[0], default=0, minimum=0, maximum=5)
-        supply_chain_management_skill = parse_int(query.get("supply_chain_management_skill", ["0"])[0], default=0, minimum=0, maximum=5)
-        structure_material_bonus = parse_int(query.get("structure_material_bonus", ["0"])[0], default=0, minimum=0, maximum=100)
-        structure_time_bonus = parse_int(query.get("structure_time_bonus", ["0"])[0], default=0, minimum=0, maximum=100)
-        rig_material_bonus = parse_int(query.get("rig_material_bonus", ["0"])[0], default=0, minimum=0, maximum=100)
-        rig_time_bonus = parse_int(query.get("rig_time_bonus", ["0"])[0], default=0, minimum=0, maximum=100)
 
         if mode:
             mode = mode.strip().lower()
@@ -675,6 +633,28 @@ class handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps({
                 "error": "quantity must be a positive integer"
+            }).encode())
+            return
+
+        try:
+            me = int(query.get("blueprint_me", ["0"])[0])
+            pe = int(query.get("production_efficiency", ["0"])[0])
+            blueprint_te = int(query.get("blueprint_te", ["0"])[0])
+            industry_skill = int(query.get("industry_skill", ["0"])[0])
+            advanced_industry_skill = int(query.get("advanced_industry_skill", ["0"])[0])
+            mass_production_skill = int(query.get("mass_production_skill", ["0"])[0])
+            advanced_mass_production_skill = int(query.get("advanced_mass_production_skill", ["0"])[0])
+            supply_chain_management_skill = int(query.get("supply_chain_management_skill", ["0"])[0])
+            structure_material_bonus = int(query.get("structure_material_bonus", ["0"])[0])
+            structure_time_bonus = int(query.get("structure_time_bonus", ["0"])[0])
+            rig_material_bonus = int(query.get("rig_material_bonus", ["0"])[0])
+            rig_time_bonus = int(query.get("rig_time_bonus", ["0"])[0])
+        except ValueError:
+            self.send_response(400)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "error": "Manufacturing variables must be integers"
             }).encode())
             return
 
