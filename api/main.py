@@ -603,6 +603,114 @@ def build_response(
     }
 
 
+class MarketError(Exception):
+    def __init__(self, message, status=400):
+        super().__init__(message)
+        self.status = status
+
+
+def esi_request(path, names=None, params=None):
+    """Keep market failures distinct from an empty market, with bounded I/O."""
+    url = "https://esi.evetech.net/latest" + path
+    kwargs = {
+        "timeout": 10,
+        "headers": {"User-Agent": "Eve-Market (https://github.com/MahnaD88/Eve-Market)"},
+    }
+    try:
+        if names is None:
+            response = requests.get(url, params=params, **kwargs)
+        else:
+            response = requests.post(url, json=names, **kwargs)
+        if response.status_code == 404:
+            raise MarketError("EVE item or location not found", 404)
+        if response.status_code in (420, 429, 503):
+            raise MarketError("EVE market service temporarily unavailable; retry later", 503)
+        response.raise_for_status()
+        return response.json(), response.headers
+    except requests.Timeout as exc:
+        raise MarketError("EVE market service timed out", 504) from exc
+    except (requests.RequestException, ValueError) as exc:
+        raise MarketError("Unable to retrieve EVE market data", 502) from exc
+
+
+def market_name_id(name, category):
+    data, _ = esi_request("/universe/ids/", names=[name.strip()])
+    for item in data.get(category, []):
+        if item["name"].casefold() == name.strip().casefold():
+            return item["id"]
+    raise MarketError(f"Unknown {category.replace('_', ' ')} name: {name}", 404)
+
+
+def market_response(type_id=None, name=None, region_name=None, scan=None,
+                    cheapest=None, top=10):
+    """Return public sell orders, ordered by price across the requested scope."""
+    if top < 1:
+        raise MarketError("top must be a positive integer")
+    flag = str(cheapest or "false").strip().lower()
+    if flag not in ("true", "false", "1", "0"):
+        raise MarketError("cheapest must be true or false")
+    check_all = flag in ("true", "1")
+    if type_id is not None:
+        try:
+            type_id = int(type_id)
+            if type_id < 1:
+                raise ValueError
+        except (ValueError, TypeError):
+            raise MarketError("typeId must be a positive integer")
+    elif name and name.strip():
+        type_id = market_name_id(name, "inventory_types")
+    else:
+        raise MarketError("Provide name or typeId for market mode")
+
+    item, _ = esi_request(f"/universe/types/{type_id}/")
+    region_id = None
+    if region_name and region_name.strip():
+        key = region_name.strip().lower()
+        region_id = int(REGIONS[key]) if key in REGIONS else market_name_id(region_name, "regions")
+
+    system_id = None
+    if scan and scan.strip():
+        system_id = market_name_id(scan, "systems")
+        system, _ = esi_request(f"/universe/systems/{system_id}/")
+        constellation, _ = esi_request(f"/universe/constellations/{system['constellation_id']}/")
+        system_region = constellation["region_id"]
+        if region_id is not None and region_id != system_region:
+            raise MarketError("scan system is not in region_name")
+        region_id = system_region
+
+    if region_id is not None:
+        regions = [region_id]
+    elif check_all:
+        regions = [int(REGIONS[key]) for key in CHECK_REGIONS]
+    else:
+        regions = [int(REGIONS["jita"])]
+    orders = []
+    for current_region in regions:
+        page = 1
+        while True:
+            batch, headers = esi_request(
+                f"/markets/{current_region}/orders/",
+                params={"order_type": "sell", "type_id": type_id, "page": page},
+            )
+            for order in batch:
+                if (not order["is_buy_order"] and order["type_id"] == type_id
+                        and (system_id is None or order["system_id"] == system_id)):
+                    orders.append({**order, "region_id": current_region})
+            if page >= int(headers.get("X-Pages", "1")):
+                break
+            page += 1
+
+    # Never truncate a page or region before comparing all matching prices.
+    orders.sort(key=lambda order: (order["price"], order["order_id"]))
+    return {
+        "status": "ok", "top": top, "typeId": type_id, "name": item["name"],
+        "region_name": region_name, "cheapest": cheapest, "scan": scan,
+        "region_ids": regions, "system_id": system_id, "order_type": "sell",
+        "total_orders": len(orders), "orders": orders[:top],
+        "cheapest_price": orders[0]["price"] if orders else None,
+    }
+
+
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         query = parse_qs(urlparse(self.path).query)
@@ -698,18 +806,17 @@ class handler(BaseHTTPRequestHandler):
                 self.wfile.write(json.dumps(response).encode())
                 return
 
+            response = market_response(type_id, name, region_name, scan, check_all, top_n)
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
-            self.wfile.write(json.dumps({
-                "status": "market mode placeholder",
-                "top": top_n,
-                "typeId": type_id,
-                "name": name,
-                "region_name": region_name,
-                "cheapest": check_all,
-                "scan": scan
-            }).encode())
+            self.wfile.write(json.dumps(response).encode())
+
+        except MarketError as e:
+            self.send_response(e.status)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": str(e)}).encode())
 
         except Exception as e:
             self.send_response(500)
