@@ -139,3 +139,9 @@ Example: `/api/main?mode=tree&name=Carbon%20Fiber&quantity=201` uses Carbon Fibe
 Reaction Formula (activity 11), runs twice, and produces batches of 200. With
 zero structure/rig bonuses it needs 10 Hydrogen Fuel Blocks, 200 Hydrocarbons
 and 200 Evaporite Deposits. Query the **product name**, not the formula item name.
+
+## Minimal MCP adapter
+
+See [mcp_adapter/README.md](mcp_adapter/README.md) for the separate read-only
+Streamable HTTP adapter, five tool schemas, local setup and contract tests.
+The hosted backend and saved GPT configuration remain unchanged.

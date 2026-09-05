@@ -1,0 +1,646 @@
+[
+  {
+    "name": "get_sell_orders",
+    "title": "Get sell orders",
+    "description": "Get public regional sell orders, cheapest first. Supply name or type_id. system_name filters a solar system, not a station. top is capped at 100.",
+    "inputSchema": {
+      "$defs": {
+        "SellOrdersInput": {
+          "additionalProperties": false,
+          "anyOf": [
+            {
+              "properties": {
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            },
+            {
+              "properties": {
+                "type_id": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "type_id"
+              ]
+            }
+          ],
+          "properties": {
+            "name": {
+              "anyOf": [
+                {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "pattern": "\\S",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Name"
+            },
+            "type_id": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Type Id"
+            },
+            "region_name": {
+              "anyOf": [
+                {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "pattern": "\\S",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Region Name"
+            },
+            "system_name": {
+              "anyOf": [
+                {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "pattern": "\\S",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "System Name"
+            },
+            "cheapest": {
+              "default": false,
+              "title": "Cheapest",
+              "type": "boolean"
+            },
+            "top": {
+              "default": 10,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Top",
+              "type": "integer"
+            }
+          },
+          "title": "SellOrdersInput",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "request": {
+          "$ref": "#/$defs/SellOrdersInput"
+        }
+      },
+      "required": [
+        "request"
+      ],
+      "title": "get_sell_ordersArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "data": {
+          "additionalProperties": true,
+          "description": "Unmodified backend JSON, including all completeness and error details",
+          "title": "Data",
+          "type": "object"
+        },
+        "warnings": {
+          "description": "Adapter context; never replaces backend warnings",
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "AdapterResponse",
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  {
+    "name": "get_market_history",
+    "title": "Get regional market history",
+    "description": "Get daily regional market history and summary. days limits latest available records; omit for all available history. This is regional volume, not station liquidity.",
+    "inputSchema": {
+      "$defs": {
+        "HistoryInput": {
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "maxLength": 256,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "Name",
+              "type": "string"
+            },
+            "region_name": {
+              "maxLength": 256,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "Region Name",
+              "type": "string"
+            },
+            "days": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Days"
+            }
+          },
+          "required": [
+            "name",
+            "region_name"
+          ],
+          "title": "HistoryInput",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "request": {
+          "$ref": "#/$defs/HistoryInput"
+        }
+      },
+      "required": [
+        "request"
+      ],
+      "title": "get_market_historyArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "data": {
+          "additionalProperties": true,
+          "description": "Unmodified backend JSON, including all completeness and error details",
+          "title": "Data",
+          "type": "object"
+        },
+        "warnings": {
+          "description": "Adapter context; never replaces backend warnings",
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "AdapterResponse",
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  {
+    "name": "get_production_tree",
+    "title": "Get production tree",
+    "description": "Get a recursive manufacturing or reaction tree with quantities, costs and completeness. Modifiers default to zero and are echoed by the backend.",
+    "inputSchema": {
+      "$defs": {
+        "ProductionInput": {
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "maxLength": 256,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "Name",
+              "type": "string"
+            },
+            "quantity": {
+              "default": 1,
+              "exclusiveMinimum": 0,
+              "title": "Quantity",
+              "type": "integer"
+            },
+            "fit": {
+              "default": "",
+              "maxLength": 8000,
+              "title": "Fit",
+              "type": "string"
+            },
+            "blueprint_me": {
+              "default": 0,
+              "title": "Blueprint Me",
+              "type": "integer"
+            },
+            "production_efficiency": {
+              "default": 0,
+              "title": "Production Efficiency",
+              "type": "integer"
+            },
+            "blueprint_te": {
+              "default": 0,
+              "title": "Blueprint Te",
+              "type": "integer"
+            },
+            "industry_skill": {
+              "default": 0,
+              "title": "Industry Skill",
+              "type": "integer"
+            },
+            "advanced_industry_skill": {
+              "default": 0,
+              "title": "Advanced Industry Skill",
+              "type": "integer"
+            },
+            "mass_production_skill": {
+              "default": 0,
+              "title": "Mass Production Skill",
+              "type": "integer"
+            },
+            "advanced_mass_production_skill": {
+              "default": 0,
+              "title": "Advanced Mass Production Skill",
+              "type": "integer"
+            },
+            "supply_chain_management_skill": {
+              "default": 0,
+              "title": "Supply Chain Management Skill",
+              "type": "integer"
+            },
+            "structure_material_bonus": {
+              "default": 0,
+              "title": "Structure Material Bonus",
+              "type": "integer"
+            },
+            "structure_time_bonus": {
+              "default": 0,
+              "title": "Structure Time Bonus",
+              "type": "integer"
+            },
+            "rig_material_bonus": {
+              "default": 0,
+              "title": "Rig Material Bonus",
+              "type": "integer"
+            },
+            "rig_time_bonus": {
+              "default": 0,
+              "title": "Rig Time Bonus",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "title": "ProductionInput",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "request": {
+          "$ref": "#/$defs/ProductionInput"
+        }
+      },
+      "required": [
+        "request"
+      ],
+      "title": "get_production_treeArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "data": {
+          "additionalProperties": true,
+          "description": "Unmodified backend JSON, including all completeness and error details",
+          "title": "Data",
+          "type": "object"
+        },
+        "warnings": {
+          "description": "Adapter context; never replaces backend warnings",
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "AdapterResponse",
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  {
+    "name": "get_material_requirements",
+    "title": "Get material requirements",
+    "description": "Get flattened raw materials and hybrid build/buy requirements for manufacturing or reactions. Incomplete plans are not complete shopping lists.",
+    "inputSchema": {
+      "$defs": {
+        "ProductionInput": {
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "maxLength": 256,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "Name",
+              "type": "string"
+            },
+            "quantity": {
+              "default": 1,
+              "exclusiveMinimum": 0,
+              "title": "Quantity",
+              "type": "integer"
+            },
+            "fit": {
+              "default": "",
+              "maxLength": 8000,
+              "title": "Fit",
+              "type": "string"
+            },
+            "blueprint_me": {
+              "default": 0,
+              "title": "Blueprint Me",
+              "type": "integer"
+            },
+            "production_efficiency": {
+              "default": 0,
+              "title": "Production Efficiency",
+              "type": "integer"
+            },
+            "blueprint_te": {
+              "default": 0,
+              "title": "Blueprint Te",
+              "type": "integer"
+            },
+            "industry_skill": {
+              "default": 0,
+              "title": "Industry Skill",
+              "type": "integer"
+            },
+            "advanced_industry_skill": {
+              "default": 0,
+              "title": "Advanced Industry Skill",
+              "type": "integer"
+            },
+            "mass_production_skill": {
+              "default": 0,
+              "title": "Mass Production Skill",
+              "type": "integer"
+            },
+            "advanced_mass_production_skill": {
+              "default": 0,
+              "title": "Advanced Mass Production Skill",
+              "type": "integer"
+            },
+            "supply_chain_management_skill": {
+              "default": 0,
+              "title": "Supply Chain Management Skill",
+              "type": "integer"
+            },
+            "structure_material_bonus": {
+              "default": 0,
+              "title": "Structure Material Bonus",
+              "type": "integer"
+            },
+            "structure_time_bonus": {
+              "default": 0,
+              "title": "Structure Time Bonus",
+              "type": "integer"
+            },
+            "rig_material_bonus": {
+              "default": 0,
+              "title": "Rig Material Bonus",
+              "type": "integer"
+            },
+            "rig_time_bonus": {
+              "default": 0,
+              "title": "Rig Time Bonus",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "title": "ProductionInput",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "request": {
+          "$ref": "#/$defs/ProductionInput"
+        }
+      },
+      "required": [
+        "request"
+      ],
+      "title": "get_material_requirementsArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "data": {
+          "additionalProperties": true,
+          "description": "Unmodified backend JSON, including all completeness and error details",
+          "title": "Data",
+          "type": "object"
+        },
+        "warnings": {
+          "description": "Adapter context; never replaces backend warnings",
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "AdapterResponse",
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  {
+    "name": "analyze_build_vs_buy",
+    "title": "Analyze build versus buy",
+    "description": "Get existing backend build/buy comparisons, recursive evidence and plans. Incomplete costs cannot support a building-is-cheaper conclusion. Does not scan candidates or calculate net profit.",
+    "inputSchema": {
+      "$defs": {
+        "ProductionInput": {
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "maxLength": 256,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "Name",
+              "type": "string"
+            },
+            "quantity": {
+              "default": 1,
+              "exclusiveMinimum": 0,
+              "title": "Quantity",
+              "type": "integer"
+            },
+            "fit": {
+              "default": "",
+              "maxLength": 8000,
+              "title": "Fit",
+              "type": "string"
+            },
+            "blueprint_me": {
+              "default": 0,
+              "title": "Blueprint Me",
+              "type": "integer"
+            },
+            "production_efficiency": {
+              "default": 0,
+              "title": "Production Efficiency",
+              "type": "integer"
+            },
+            "blueprint_te": {
+              "default": 0,
+              "title": "Blueprint Te",
+              "type": "integer"
+            },
+            "industry_skill": {
+              "default": 0,
+              "title": "Industry Skill",
+              "type": "integer"
+            },
+            "advanced_industry_skill": {
+              "default": 0,
+              "title": "Advanced Industry Skill",
+              "type": "integer"
+            },
+            "mass_production_skill": {
+              "default": 0,
+              "title": "Mass Production Skill",
+              "type": "integer"
+            },
+            "advanced_mass_production_skill": {
+              "default": 0,
+              "title": "Advanced Mass Production Skill",
+              "type": "integer"
+            },
+            "supply_chain_management_skill": {
+              "default": 0,
+              "title": "Supply Chain Management Skill",
+              "type": "integer"
+            },
+            "structure_material_bonus": {
+              "default": 0,
+              "title": "Structure Material Bonus",
+              "type": "integer"
+            },
+            "structure_time_bonus": {
+              "default": 0,
+              "title": "Structure Time Bonus",
+              "type": "integer"
+            },
+            "rig_material_bonus": {
+              "default": 0,
+              "title": "Rig Material Bonus",
+              "type": "integer"
+            },
+            "rig_time_bonus": {
+              "default": 0,
+              "title": "Rig Time Bonus",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "title": "ProductionInput",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "request": {
+          "$ref": "#/$defs/ProductionInput"
+        }
+      },
+      "required": [
+        "request"
+      ],
+      "title": "analyze_build_vs_buyArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "data": {
+          "additionalProperties": true,
+          "description": "Unmodified backend JSON, including all completeness and error details",
+          "title": "Data",
+          "type": "object"
+        },
+        "warnings": {
+          "description": "Adapter context; never replaces backend warnings",
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "AdapterResponse",
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  }
+]
