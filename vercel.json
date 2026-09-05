@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/market-history", "destination": "/api/main?_route=market-history" }
+  ]
+}

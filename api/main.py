@@ -1,4 +1,5 @@
 from http.server import BaseHTTPRequestHandler
+from datetime import date
 import json
 import math
 import sqlite3
@@ -711,9 +712,103 @@ def market_response(type_id=None, name=None, region_name=None, scan=None,
     }
 
 
+def get_market_history(region_id, type_id):
+    history, _ = esi_request(
+        f"/markets/{region_id}/history/", params={"type_id": type_id}
+    )
+    fields = ("average", "highest", "lowest", "order_count", "volume")
+    try:
+        if not isinstance(history, list):
+            raise ValueError
+        for row in history:
+            # Reject malformed upstream data instead of producing misleading totals.
+            date.fromisoformat(row["date"])
+            if any(isinstance(row[key], bool) or not isinstance(row[key], (int, float))
+                   or not math.isfinite(row[key]) or row[key] < 0 for key in fields):
+                raise ValueError
+        return sorted(history, key=lambda row: row["date"])
+    except (KeyError, TypeError, ValueError, OverflowError) as exc:
+        raise MarketError("Invalid EVE market history response", 502) from exc
+
+
+def market_history_response(name=None, region_name=None, days=None):
+    if not name or not name.strip():
+        raise MarketError("Provide name for market history")
+    if not region_name or not region_name.strip():
+        raise MarketError("Provide region_name for market history")
+    if days is not None:
+        try:
+            days = int(days)
+            if days < 1:
+                raise ValueError
+        except (TypeError, ValueError):
+            raise MarketError("days must be a positive integer")
+
+    # The market-mode ESI resolver distinguishes unknown names from upstream
+    # outages, unlike the older manufacturing resolver's cached None fallback.
+    type_id = market_name_id(name, "inventory_types")
+    key = region_name.strip().lower()
+    region_id = int(REGIONS[key]) if key in REGIONS else market_name_id(region_name, "regions")
+    history = get_market_history(region_id, type_id)
+    if days is not None:
+        history = history[-days:]
+    count = len(history)
+    total_volume = sum(row["volume"] for row in history)
+    average = sum(row["average"] for row in history) / count if count else None
+    summary = {
+        "average_price": average,
+        "average_daily_volume": total_volume / count if count else None,
+        "total_volume": total_volume,
+        "lowest_price": min((row["lowest"] for row in history), default=None),
+        "highest_price": max((row["highest"] for row in history), default=None),
+        "average_order_count": sum(row["order_count"] for row in history) / count if count else None,
+        "days_returned": count,
+        "current_vs_average": None,
+    }
+    # Optional context only: do not trigger slow multi-region price requests.
+    # Existing manufacturing prices are cached Fuzzwork sell percentiles across
+    # CHECK_REGIONS, not a live quote for this history region.
+    current = buy_price_cache.get(str(type_id))
+    if (average and isinstance(current, (int, float)) and not isinstance(current, bool)
+            and math.isfinite(current) and current > 0):
+        summary["current_vs_average"] = {
+            "current_price": current,
+            "difference": current - average,
+            "difference_percent": (current - average) / average * 100,
+            "source": "cached_manufacturing_sell_percentile",
+            "region_ids": [int(REGIONS[key]) for key in CHECK_REGIONS],
+            "freshness": "unknown",
+        }
+    return {
+        "status": "ok", "name": name.strip(), "type_id": type_id,
+        "region_name": region_name.strip(), "region_id": region_id,
+        "days": days, "history": history, "summary": summary,
+    }
+
+
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         query = parse_qs(urlparse(self.path).query)
+
+        if (urlparse(self.path).path.rstrip("/") == "/market-history"
+                or query.get("_route", [None])[0] == "market-history"):
+            history_query = parse_qs(urlparse(self.path).query, keep_blank_values=True)
+            try:
+                response = market_history_response(
+                    history_query.get("name", [None])[0],
+                    history_query.get("region_name", [None])[0],
+                    history_query.get("days", [None])[0],
+                )
+                status = 200
+            except MarketError as exc:
+                response, status = {"error": str(exc)}, exc.status
+            except Exception:
+                response, status = {"error": "Unable to retrieve market history"}, 500
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps(response).encode())
+            return
 
         mode = query.get("mode", [None])[0]
         type_id = query.get("typeId", [None])[0]

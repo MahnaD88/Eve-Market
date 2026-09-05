@@ -43,3 +43,65 @@ and [market pagination](https://developers.eveonline.com/blog/esi-concurrent-pro
 Install `requirements.txt`, then run `python -m unittest discover -s tests -v`.
 The tests mock ESI, covering filtering, pagination, sorting, scope selection,
 validation, failure handling, and preservation of manufacturing dispatch.
+
+## Regional market history
+
+`GET /market-history?name=Drake&region_name=The%20Forge&days=2`
+
+`name` and `region_name` are required, case-insensitive exact EVE names.
+The existing Jita, Amarr, Dodixie and Hek region aliases also work. Item
+resolution uses the existing market-mode ESI resolver so outages are not
+mistaken for unknown items. The manufacturing resolver remains unchanged.
+
+`days` is optional and must be a positive integer when supplied. Omit it for
+all history available from ESI. It selects the latest N **available daily
+records**, sorted oldest to newest, rather than a calendar window ending
+today; days without a record are not filled with zeros. A limit larger than
+the available history returns all records.
+
+Illustrative response (prices and volumes are example data):
+
+```json
+{
+  "status": "ok",
+  "name": "Drake",
+  "type_id": 24698,
+  "region_name": "The Forge",
+  "region_id": 10000002,
+  "days": 2,
+  "history": [
+    {"date": "2026-09-03", "average": 100, "highest": 120, "lowest": 80, "order_count": 10, "volume": 20},
+    {"date": "2026-09-04", "average": 150, "highest": 180, "lowest": 120, "order_count": 20, "volume": 40}
+  ],
+  "summary": {
+    "average_price": 125,
+    "average_daily_volume": 30,
+    "total_volume": 60,
+    "lowest_price": 80,
+    "highest_price": 180,
+    "average_order_count": 15,
+    "days_returned": 2,
+    "current_vs_average": null
+  }
+}
+```
+
+Summaries use only returned rows. `average_price` is the arithmetic mean of
+ESI daily averages (not volume weighted); daily volume and order count are
+also arithmetic means. Lowest/highest are the extrema of daily lowest/highest
+prices. ESI row fields are preserved. Prices are ISK per unit, volume is units.
+
+`current_vs_average` is null unless the existing manufacturing price cache
+already contains a positive price and the history average is positive. No
+additional pricing calls are made. When available, it contains `current_price`,
+`difference` (current minus average), `difference_percent` (difference divided
+by average times 100), `source: "cached_manufacturing_sell_percentile"`, the
+four configured `region_ids`, and `freshness: "unknown"`. This optional context
+is a cached cross-region Fuzzwork sell percentile, **not a fresh quote for the
+requested region**; the existing cache has no timestamps.
+
+Empty history returns 200, an empty list, zero total volume/days, and null
+averages/extrema/comparison. Invalid/missing inputs return 400; unknown names
+404; upstream or malformed ESI responses 502; ESI rate limits/unavailability
+503; timeouts 504. The Vercel rewrite maps only `/market-history` to the
+existing Python handler; existing market and manufacturing URLs still work.
