@@ -257,7 +257,11 @@ def build_tree(
             "name": product_name,
             "quantity_requested": quantity,
             "buildable": False,
-            "error": "Max depth reached"
+            "error": "Max depth reached",
+            "total_cost": None,
+            "cost_complete": False,
+            "missing_prices": [],
+            "incomplete_reasons": ["Max depth reached"]
         }
 
     rows = get_blueprint_and_materials(conn, product_name)
@@ -273,7 +277,10 @@ def build_tree(
             "materials": [],
             "buy_price": buy_price,
             "line_total": total_cost,
-            "total_cost": total_cost
+            "total_cost": total_cost,
+            "cost_complete": total_cost is not None,
+            "missing_prices": [product_name] if total_cost is None else [],
+            "incomplete_reasons": ["Missing material prices"] if total_cost is None else []
         }
 
     first = rows[0]
@@ -367,10 +374,32 @@ def build_tree(
             if line_total is not None:
                 total_cost += line_total
 
+        if material_buildable:
+            material_node.update(cost_status(component))
+        else:
+            material_node.update({
+                "cost_complete": line_total is not None,
+                "missing_prices": [material_name] if line_total is None else [],
+                "incomplete_reasons": ["Missing material prices"] if line_total is None else []
+            })
         node["materials"].append(material_node)
 
-    node["total_cost"] = total_cost
+    node.update(combine_cost_status(node["materials"]))
+    node["total_cost"] = total_cost if node["cost_complete"] else None
     return node
+
+
+def cost_status(node):
+    return {key: node[key] for key in
+            ("cost_complete", "missing_prices", "incomplete_reasons")}
+
+
+def combine_cost_status(nodes):
+    return {
+        "cost_complete": all(node["cost_complete"] for node in nodes),
+        "missing_prices": sorted({name for node in nodes for name in node["missing_prices"]}),
+        "incomplete_reasons": sorted({reason for node in nodes for reason in node["incomplete_reasons"]})
+    }
 
 
 def collect_raw_materials(tree, totals=None):
@@ -550,8 +579,11 @@ def build_response(
             rig_time_bonus=rig_time_bonus
         )
         tree.setdefault("fit_items", []).append(sub)
-        if sub.get("total_cost") is not None:
+        if tree["cost_complete"] and sub["cost_complete"]:
             tree["total_cost"] += sub["total_cost"]
+        else:
+            tree["total_cost"] = None
+        tree.update(combine_cost_status([tree, sub]))
 
     type_id = resolve_type_id(product_name)
     market_price = get_buy_price(type_id)
@@ -562,12 +594,14 @@ def build_response(
     decision["market_total_price"] = market_total_price
 
     plan = extract_build_buy_plan(tree)
+    plan.update(cost_status(tree))
     hybrid = collect_hybrid_requirements(tree)
     hybrid_raw_list = [
         {"name": name, "quantity": qty}
         for name, qty in sorted(hybrid["raw_materials"].items())
     ]
     hybrid_plan = {
+        **cost_status(tree),
         "buy_components": hybrid["buy_components"],
         "build_components": hybrid["build_components"],
         "marginal_components": hybrid["marginal_components"],
@@ -590,6 +624,8 @@ def build_response(
 
     if mode == "raw":
         return {
+            **cost_status(tree),
+            "total_cost": tree["total_cost"],
             "name": product_name,
             "quantity_requested": quantity,
             "raw_materials": raw_list,
@@ -602,6 +638,8 @@ def build_response(
 
     if mode == "both":
         return {
+            **cost_status(tree),
+            "total_cost": tree["total_cost"],
             "name": product_name,
             "quantity_requested": quantity,
             "tree": tree,

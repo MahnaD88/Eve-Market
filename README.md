@@ -1,5 +1,17 @@
 # Eve-Market
 
+The implemented routes and parameters are recorded in [the API contract](docs/api-contract.md).
+The files `docs/current-gpt-actions.openapi.yaml` and
+`docs/current-gpt-instructions.md` are explicitly pending the owner's original
+GPT configuration exports; the YAML placeholder is not an importable schema.
+
+Production responses expose `cost_complete`, `missing_prices`, and
+`incomplete_reasons`. Missing required material prices make `total_cost` null
+and suppress dependent build-vs-buy comparisons. This propagates through
+manufacturing, reaction chains and fitted items, including raw/both responses
+and plan completeness metadata. Fully priced calculations retain their previous
+costs and decisions.
+
 `GET /api/main` serves market lookups unless `mode=tree`, `raw`, or `both`
 selects the existing manufacturing API.
 
