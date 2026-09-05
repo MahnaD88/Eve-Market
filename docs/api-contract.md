@@ -3,15 +3,17 @@
 Captured from `api/main.py` and `vercel.json`, based on main commit
 `580af603b41cf6a6a95fc038142f422e3f73a326`, with the cost-completeness changes
 described below. This is an implementation inventory, not an exported GPT Action
-schema. The saved GPT schema and instructions remain pending in the adjacent files.
-The known deployment origin is `https://eve-market-weld.vercel.app`; this document
-does not establish which revision is currently running there.
+schema. The owner-supplied GPT schema and instructions are preserved in the adjacent files.
+The deployment origin is `https://eve-market-weld.vercel.app`. Public validation
+requests on 2026-09-05 confirmed that `/` and `/api/main` both return the quantity
+validation error (400), and `/market-history` returns the days validation error
+(400). These probes establish route behavior, not the exact deployed revision.
 
 ## Routes and dispatch
 
 | Method/path | Behavior |
 | --- | --- |
-| `GET /api/main` | Market orders by default; `mode=tree`, `raw`, or `both` selects production. |
+| `GET /` (live alias), `GET /api/main` | Market orders by default; `mode=tree`, `raw`, or `both` selects production. |
 | `GET /market-history` | Regional daily history; Vercel rewrites to `/api/main?_route=market-history`. |
 
 The internal `_route=market-history` query also selects history on `/api/main`.
@@ -136,9 +138,39 @@ empty history array. Validation and upstream errors use the market error statuse
 
 Example: `/market-history?name=Drake&region_name=The%20Forge&days=30`
 
-## Configuration capture still required
+## Captured GPT configuration and mismatches
 
-The GPT editor must supply the actual Action schema and instructions. Its server
-URL, operation IDs, enabled parameters, authentication choice and reasoning rules
-cannot be established from this implementation. Paste the original exports into
-the adjacent placeholders before treating them as a frozen GPT contract.
+The owner supplied both snapshots on 2026-09-05. The Action is OpenAPI 3.1.0,
+API version 1.2.0, server `https://eve-market-weld.vercel.app`, with one operation:
+`analyzeItem`, `GET /`, and 21 query parameters. The original JSON has been kept
+in the `.yaml` file: JSON syntax is valid YAML, so this is not a malformed format.
+It parses and all local schema references resolve. This is a structural check,
+not certification by the GPT editor or a complete OpenAPI validator.
+Instructions retain the supplied Markdown escapes verbatim. Neither snapshot
+has been corrected, and neither has been installed back into the GPT.
+
+| Area | Supplied GPT configuration versus current implementation |
+| --- | --- |
+| Route | `/` is the registered Action path and works on the public deployment. `/api/main` also works. The repository's explicit rewrite only covers history; the root alias's deployment-level source is not established by `vercel.json`. Do not label `/` broken. |
+| Market descriptions | `typeId`, `region_name`, `cheapest`, `scan`, and `top` still say "Market mode placeholder parameter". All now drive real market lookups. |
+| Market response | `MarketPlaceholderResponse` is obsolete. It lacks orders, resolved location IDs, order count and cheapest price. Its `typeId` allows string/null, but successful market responses return an integer. `additionalProperties: true` allows undeclared fields, but does not correct a conflicting declared type. |
+| History | No `/market-history` operation or `days` parameter is exposed, despite the working backend route. The current Action cannot describe or directly select that operation. |
+| Cost completeness | The schema does not describe `cost_complete`, `missing_prices`, or `incomplete_reasons` on nodes, responses or plans. Raw/both also omit the newly exposed `total_cost`. Null totals are already allowed where declared. |
+| Reactions | Reaction calculations work, but `activity` and `activity_id` are not described in the response schemas. |
+| Default mode | Instructions and schema say tree; backend omission selects market. A schema default is not evidence the HTTP client will send `mode=tree`. |
+| Required name | Schema marks name optional for every mode; backend requires it for production, and market requires either name or typeId. |
+| Variables | Instructions require asking for all twelve variables before any API call. Schema marks them optional with zero defaults; backend defaults to zero. The unqualified instruction can also interrupt market-only queries unnecessarily. |
+| Errors and validation | Schema describes only 200/400/500, omitting 404/502/503/504. `top` lacks a positive minimum; `typeId` lacks positive-integer constraints; `cheapest` lacks its accepted-value constraints. The backend validates these. |
+| Response alternatives | `oneOf` alternatives overlap: permissive TreeResponse and MarketPlaceholderResponse can both validate the same object. MarketPlaceholderResponse has no required fields. Thus real responses may fail exclusive-one validation even though the document parses. This is a schema-design defect, not invalid JSON. |
+| Output instructions | "Output ONLY" BUILD/BUY/SHOPPING LIST when hybrid_plan exists does not require showing incomplete-cost state or missing prices. It can hide the backend warning, and omits marginal components. The captured instructions need a future reviewed change to surface incompleteness before recommendations. |
+| Name handling | Removing numbers and forcing singular names can corrupt legitimate EVE item names. Preserve this as a documented instruction risk rather than silently modifying the snapshot. |
+
+No `security` or `securitySchemes` entries are present. This establishes only
+what the supplied schema declares; GPT-editor authentication settings were not
+provided and remain unverified. The backend has no application authentication check.
+
+The missing-price fix is already committed in
+`c6e19b0b4b74eed37b09bfe7ff6b82e4de06409c`; its 37-test suite passed, including
+market history and reactions. This configuration capture introduces no runtime
+changes. Updating the installed Action, changing GPT instructions, and adding a
+plugin/MCP adapter remain outside this task.

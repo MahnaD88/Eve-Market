@@ -1,4 +1,741 @@
-# Pending: paste the verbatim Action schema exported from the current custom GPT.
-# This comment-only placeholder is NOT an OpenAPI document and must not be imported.
-# The registered GPT configuration was not available in this repository.
-# See api-contract.md for the separately documented implementation contract.
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "EVE Industry API",
+    "version": "1.2.0"
+  },
+  "servers": [
+    {
+      "url": "https://eve-market-weld.vercel.app"
+    }
+  ],
+  "paths": {
+    "/": {
+      "get": {
+        "operationId": "analyzeItem",
+        "summary": "Build tree, raw materials, and hybrid industry analysis",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Exact item name"
+          },
+          {
+            "name": "quantity",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "minimum": 1
+            },
+            "description": "Number of items to build or analyze"
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["tree", "raw", "both", "market"],
+              "default": "tree"
+            },
+            "description": "Analysis mode"
+          },
+          {
+            "name": "fit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": ""
+            },
+            "description": "Optional EVE fit text. Each item in the fit is added to the analysis."
+          },
+          {
+            "name": "blueprint_me",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0
+            },
+            "description": "Blueprint material efficiency"
+          },
+          {
+            "name": "production_efficiency",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0
+            },
+            "description": "Production efficiency value used by the current API material formula"
+          },
+          {
+            "name": "blueprint_te",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0
+            },
+            "description": "Blueprint time efficiency"
+          },
+          {
+            "name": "industry_skill",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0
+            },
+            "description": "Industry skill level"
+          },
+          {
+            "name": "advanced_industry_skill",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0
+            },
+            "description": "Advanced Industry skill level"
+          },
+          {
+            "name": "mass_production_skill",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0
+            },
+            "description": "Mass Production skill level"
+          },
+          {
+            "name": "advanced_mass_production_skill",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0
+            },
+            "description": "Advanced Mass Production skill level"
+          },
+          {
+            "name": "supply_chain_management_skill",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0
+            },
+            "description": "Supply Chain Management skill level"
+          },
+          {
+            "name": "structure_material_bonus",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0
+            },
+            "description": "Structure material bonus percentage"
+          },
+          {
+            "name": "structure_time_bonus",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0
+            },
+            "description": "Structure time bonus percentage"
+          },
+          {
+            "name": "rig_material_bonus",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0
+            },
+            "description": "Rig material bonus percentage"
+          },
+          {
+            "name": "rig_time_bonus",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0
+            },
+            "description": "Rig time bonus percentage"
+          },
+          {
+            "name": "typeId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Market mode placeholder parameter"
+          },
+          {
+            "name": "region_name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Market mode placeholder parameter"
+          },
+          {
+            "name": "cheapest",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Market mode placeholder parameter"
+          },
+          {
+            "name": "scan",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Market mode placeholder parameter"
+          },
+          {
+            "name": "top",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 10
+            },
+            "description": "Market mode placeholder parameter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Industry analysis result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/TreeResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RawResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BothResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MarketPlaceholderResponse"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BuildDecision": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "market_price": {
+            "type": ["number", "null"]
+          },
+          "margin_threshold": {
+            "type": ["number", "null"]
+          },
+          "difference_percent": {
+            "type": ["number", "null"]
+          },
+          "build_vs_buy": {
+            "type": ["string", "null"],
+            "enum": ["build", "buy", "marginal", null]
+          },
+          "savings": {
+            "type": ["number", "null"]
+          },
+          "unit_market_price": {
+            "type": ["number", "null"]
+          },
+          "market_total_price": {
+            "type": ["number", "null"]
+          }
+        }
+      },
+      "Inputs": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "blueprint_me": {
+            "type": "integer"
+          },
+          "blueprint_te": {
+            "type": "integer"
+          },
+          "production_efficiency": {
+            "type": "integer"
+          },
+          "industry_skill": {
+            "type": "integer"
+          },
+          "advanced_industry_skill": {
+            "type": "integer"
+          },
+          "mass_production_skill": {
+            "type": "integer"
+          },
+          "advanced_mass_production_skill": {
+            "type": "integer"
+          },
+          "supply_chain_management_skill": {
+            "type": "integer"
+          },
+          "structure_material_bonus": {
+            "type": "integer"
+          },
+          "structure_time_bonus": {
+            "type": "integer"
+          },
+          "rig_material_bonus": {
+            "type": "integer"
+          },
+          "rig_time_bonus": {
+            "type": "integer"
+          },
+          "blueprint_time_multiplier": {
+            "type": "number"
+          },
+          "industry_time_multiplier": {
+            "type": "number"
+          },
+          "advanced_industry_time_multiplier": {
+            "type": "number"
+          },
+          "structure_time_multiplier": {
+            "type": "number"
+          },
+          "rig_time_multiplier": {
+            "type": "number"
+          },
+          "total_manufacturing_time_multiplier": {
+            "type": "number"
+          },
+          "available_manufacturing_jobs": {
+            "type": "integer"
+          },
+          "remote_job_range_jumps": {
+            "type": "integer"
+          }
+        }
+      },
+      "PlanEntry": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "name": {
+            "type": ["string", "null"]
+          },
+          "quantity": {
+            "type": ["integer", "null"]
+          },
+          "unit_market_price": {
+            "type": ["number", "null"]
+          },
+          "market_total_price": {
+            "type": ["number", "null"]
+          },
+          "component_total_cost": {
+            "type": ["number", "null"]
+          },
+          "difference_percent": {
+            "type": ["number", "null"]
+          },
+          "savings": {
+            "type": ["number", "null"]
+          }
+        }
+      },
+      "Plan": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "build": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlanEntry"
+            }
+          },
+          "buy": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlanEntry"
+            }
+          },
+          "marginal": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlanEntry"
+            }
+          }
+        }
+      },
+      "HybridPlan": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "buy_components": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlanEntry"
+            }
+          },
+          "build_components": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlanEntry"
+            }
+          },
+          "marginal_components": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlanEntry"
+            }
+          },
+          "raw_materials": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RawMaterial"
+            }
+          }
+        }
+      },
+      "RawMaterial": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer"
+          }
+        },
+        "required": ["name", "quantity"]
+      },
+      "MaterialNode": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": ["integer", "null"]
+          },
+          "quantity_requested": {
+            "type": ["integer", "null"]
+          },
+          "buildable": {
+            "type": "boolean"
+          },
+          "buy_price": {
+            "type": ["number", "null"]
+          },
+          "line_total": {
+            "type": ["number", "null"]
+          },
+          "selected_total_cost": {
+            "type": ["number", "null"]
+          },
+          "market_price": {
+            "type": ["number", "null"]
+          },
+          "margin_threshold": {
+            "type": ["number", "null"]
+          },
+          "difference_percent": {
+            "type": ["number", "null"]
+          },
+          "build_vs_buy": {
+            "type": ["string", "null"],
+            "enum": ["build", "buy", "marginal", null]
+          },
+          "savings": {
+            "type": ["number", "null"]
+          },
+          "unit_market_price": {
+            "type": ["number", "null"]
+          },
+          "market_total_price": {
+            "type": ["number", "null"]
+          },
+          "components": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "materials": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "total_cost": {
+            "type": ["number", "null"]
+          },
+          "error": {
+            "type": ["string", "null"]
+          }
+        },
+        "required": ["name", "buildable"]
+      },
+      "TreeResponse": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "blueprint": {
+            "type": "string"
+          },
+          "output_quantity": {
+            "type": "integer"
+          },
+          "quantity_requested": {
+            "type": "integer"
+          },
+          "runs_needed": {
+            "type": "integer"
+          },
+          "buildable": {
+            "type": "boolean"
+          },
+          "buy_price": {
+            "type": ["number", "null"]
+          },
+          "line_total": {
+            "type": ["number", "null"]
+          },
+          "total_cost": {
+            "type": ["number", "null"]
+          },
+          "materials": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MaterialNode"
+            }
+          },
+          "inputs": {
+            "$ref": "#/components/schemas/Inputs"
+          },
+          "fit_items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "plan": {
+            "$ref": "#/components/schemas/Plan"
+          },
+          "hybrid_plan": {
+            "$ref": "#/components/schemas/HybridPlan"
+          },
+          "market_price": {
+            "type": ["number", "null"]
+          },
+          "margin_threshold": {
+            "type": ["number", "null"]
+          },
+          "difference_percent": {
+            "type": ["number", "null"]
+          },
+          "build_vs_buy": {
+            "type": ["string", "null"],
+            "enum": ["build", "buy", "marginal", null]
+          },
+          "savings": {
+            "type": ["number", "null"]
+          },
+          "unit_market_price": {
+            "type": ["number", "null"]
+          },
+          "market_total_price": {
+            "type": ["number", "null"]
+          }
+        },
+        "required": ["name"]
+      },
+      "RawResponse": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "quantity_requested": {
+            "type": "integer"
+          },
+          "raw_materials": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RawMaterial"
+            }
+          },
+          "inputs": {
+            "$ref": "#/components/schemas/Inputs"
+          },
+          "fit_items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "plan": {
+            "$ref": "#/components/schemas/Plan"
+          },
+          "hybrid_plan": {
+            "$ref": "#/components/schemas/HybridPlan"
+          },
+          "market_price": {
+            "type": ["number", "null"]
+          },
+          "margin_threshold": {
+            "type": ["number", "null"]
+          },
+          "difference_percent": {
+            "type": ["number", "null"]
+          },
+          "build_vs_buy": {
+            "type": ["string", "null"],
+            "enum": ["build", "buy", "marginal", null]
+          },
+          "savings": {
+            "type": ["number", "null"]
+          },
+          "unit_market_price": {
+            "type": ["number", "null"]
+          },
+          "market_total_price": {
+            "type": ["number", "null"]
+          }
+        },
+        "required": ["name", "quantity_requested", "raw_materials"]
+      },
+      "BothResponse": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "quantity_requested": {
+            "type": "integer"
+          },
+          "tree": {
+            "$ref": "#/components/schemas/TreeResponse"
+          },
+          "raw_materials": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RawMaterial"
+            }
+          },
+          "inputs": {
+            "$ref": "#/components/schemas/Inputs"
+          },
+          "fit_items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "plan": {
+            "$ref": "#/components/schemas/Plan"
+          },
+          "hybrid_plan": {
+            "$ref": "#/components/schemas/HybridPlan"
+          },
+          "market_price": {
+            "type": ["number", "null"]
+          },
+          "margin_threshold": {
+            "type": ["number", "null"]
+          },
+          "difference_percent": {
+            "type": ["number", "null"]
+          },
+          "build_vs_buy": {
+            "type": ["string", "null"],
+            "enum": ["build", "buy", "marginal", null]
+          },
+          "savings": {
+            "type": ["number", "null"]
+          },
+          "unit_market_price": {
+            "type": ["number", "null"]
+          },
+          "market_total_price": {
+            "type": ["number", "null"]
+          }
+        },
+        "required": ["name", "quantity_requested", "tree", "raw_materials"]
+      },
+      "MarketPlaceholderResponse": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "top": {
+            "type": "integer"
+          },
+          "typeId": {
+            "type": ["string", "null"]
+          },
+          "name": {
+            "type": ["string", "null"]
+          },
+          "region_name": {
+            "type": ["string", "null"]
+          },
+          "cheapest": {
+            "type": ["string", "null"]
+          },
+          "scan": {
+            "type": ["string", "null"]
+          }
+        }
+      }
+    }
+  }
+}

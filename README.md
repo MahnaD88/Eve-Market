@@ -2,8 +2,10 @@
 
 The implemented routes and parameters are recorded in [the API contract](docs/api-contract.md).
 The files `docs/current-gpt-actions.openapi.yaml` and
-`docs/current-gpt-instructions.md` are explicitly pending the owner's original
-GPT configuration exports; the YAML placeholder is not an importable schema.
+`docs/current-gpt-instructions.md` preserve the configuration supplied by the owner.
+The Action schema retains its original JSON syntax (also valid YAML). Known
+differences from the backend are documented in the contract; these snapshots
+have not been corrected or installed into the GPT.
 
 Production responses expose `cost_complete`, `missing_prices`, and
 `incomplete_reasons`. Missing required material prices make `total_cost` null
