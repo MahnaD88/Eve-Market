@@ -105,3 +105,23 @@ averages/extrema/comparison. Invalid/missing inputs return 400; unknown names
 404; upstream or malformed ESI responses 502; ESI rate limits/unavailability
 503; timeouts 504. The Vercel rewrite maps only `/market-history` to the
 existing Python handler; existing market and manufacturing URLs still work.
+
+## Manufacturing and reactions
+
+Build modes recognise SDE activity 1 (manufacturing) and 11 (reactions).
+Each buildable tree node includes `activity_id` and `activity` (`manufacturing`
+or `reaction`). Recipes are selected as a single blueprint/activity pair;
+when alternatives exist, manufacturing is preferred, then the lowest blueprint
+ID. Inputs from different recipes or activities are never combined.
+
+Reaction batch output and input quantities come from the SDE. Requested output
+is rounded up to whole runs. Manufacturing ME/PE inputs do not reduce reaction
+materials; the existing explicit structure/rig material bonuses still apply.
+Manufacturing calculations are otherwise unchanged. Existing recursive cost,
+build-vs-buy, raw-material and hybrid-plan logic also traverses reaction nodes.
+The existing manufacturing timing context is not a reaction duration estimate.
+
+Example: `/api/main?mode=tree&name=Carbon%20Fiber&quantity=201` uses Carbon Fiber
+Reaction Formula (activity 11), runs twice, and produces batches of 200. With
+zero structure/rig bonuses it needs 10 Hydrogen Fuel Blocks, 200 Hydrocarbons
+and 200 Evaporite Deposits. Query the **product name**, not the formula item name.

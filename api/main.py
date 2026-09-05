@@ -57,8 +57,17 @@ def get_blueprint_and_materials(conn, product_name):
         return blueprint_cache[product_name]
 
     query = """
+    WITH recipe AS (
+        SELECT p.*
+        FROM industryActivityProducts p
+        JOIN invTypes prod ON p.productTypeID = prod.typeID
+        WHERE p.activityID IN (1, 11) AND prod.typeName = ?
+        ORDER BY p.activityID, p.typeID
+        LIMIT 1
+    )
     SELECT
         p.typeID AS blueprintTypeID,
+        p.activityID,
         bp.typeName AS blueprintName,
         p.productTypeID,
         prod.typeName AS productName,
@@ -66,7 +75,7 @@ def get_blueprint_and_materials(conn, product_name):
         m.materialTypeID,
         mat.typeName AS materialName,
         m.quantity AS materialQuantity
-    FROM industryActivityProducts p
+    FROM recipe p
     JOIN industryActivityMaterials m
         ON p.typeID = m.typeID
         AND p.activityID = m.activityID
@@ -76,8 +85,6 @@ def get_blueprint_and_materials(conn, product_name):
         ON p.productTypeID = prod.typeID
     JOIN invTypes mat
         ON m.materialTypeID = mat.typeID
-    WHERE p.activityID = 1
-      AND prod.typeName = ?
     """
 
     rows = conn.execute(query, (product_name,)).fetchall()
@@ -94,7 +101,7 @@ def is_buildable(conn, item_name):
     FROM industryActivityProducts p
     JOIN invTypes prod
         ON p.productTypeID = prod.typeID
-    WHERE p.activityID = 1
+    WHERE p.activityID IN (1, 11)
       AND prod.typeName = ?
     LIMIT 1
     """
@@ -270,12 +277,15 @@ def build_tree(
         }
 
     first = rows[0]
+    activity_id = first["activityID"]
     output_quantity = first["outputQuantity"]
     runs_needed = math.ceil(quantity / output_quantity)
 
     node = {
         "name": first["productName"],
         "blueprint": first["blueprintName"],
+        "activity_id": activity_id,
+        "activity": "reaction" if activity_id == 11 else "manufacturing",
         "output_quantity": output_quantity,
         "quantity_requested": quantity,
         "runs_needed": runs_needed,
@@ -288,7 +298,11 @@ def build_tree(
     for row in rows:
         material_name = row["materialName"]
         base_qty = row["materialQuantity"] * runs_needed
-        material_qty = apply_material_modifiers(base_qty, me, pe, structure_material_bonus, rig_material_bonus)
+        material_qty = apply_material_modifiers(
+            base_qty, me if activity_id == 1 else 0,
+            pe if activity_id == 1 else 0,
+            structure_material_bonus, rig_material_bonus
+        )
         material_buildable = is_buildable(conn, material_name)
 
         material_node = {
