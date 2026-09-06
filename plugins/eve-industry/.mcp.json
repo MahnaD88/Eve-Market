@@ -2,7 +2,7 @@
   "mcpServers": {
     "eve-industry": {
       "type": "http",
-      "url": "http://127.0.0.1:8000/mcp"
+      "url": "https://project-jm8k1.vercel.app/mcp"
     }
   }
 }
