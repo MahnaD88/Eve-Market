@@ -1,7 +1,10 @@
 {
   "functions": {
-    "app.py": {
+    "api/index.py": {
       "maxDuration": 180
     }
-  }
+  },
+  "rewrites": [
+    { "source": "/mcp", "destination": "/api" }
+  ]
 }
