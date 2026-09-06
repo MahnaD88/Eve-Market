@@ -23,10 +23,12 @@ class PluginTests(unittest.TestCase):
     def test_package_manifest_skills_and_references(self):
         manifest = json.loads((PLUGIN / '.codex-plugin/plugin.json').read_text())
         self.assertEqual(manifest['name'], PLUGIN.name)
-        self.assertEqual(manifest['mcpServers'], './.mcp.json')
-        self.assertNotIn('apps', manifest)  # No invented registered connection ID.
-        connection = json.loads((PLUGIN / '.mcp.json').read_text())
-        self.assertEqual(connection['mcpServers']['eve-industry']['url'], 'http://127.0.0.1:8000/mcp')
+        self.assertEqual(manifest['apps'], './.app.json')
+        self.assertNotIn('mcpServers', manifest)
+        self.assertFalse((PLUGIN / '.mcp.json').exists())
+        self.assertEqual(json.loads((PLUGIN / '.app.json').read_text()), {'apps': {'eve-industry': {'id': 'asdk_app_6a9db8c900e08191bd9953ac25247730', 'required': True}}})
+        connection = json.loads((PLUGIN / '.mcp.local.json').read_text())
+        self.assertEqual(connection['mcpServers']['eve-industry']['url'], 'https://project-jm8k1.vercel.app/mcp')
         skills = sorted((PLUGIN / 'skills').glob('*/SKILL.md'))
         self.assertEqual(len(skills), 3)
         for path in skills:
@@ -45,25 +47,30 @@ class PluginTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             copy = Path(temp) / 'eve-industry'
             shutil.copytree(PLUGIN, copy)
-            configure('plugin_asdk_app_test_fixture', copy)
+            (copy / '.mcp.local.json').rename(copy / '.mcp.json')
+            original = (copy / '.mcp.json').read_bytes()
+            configure('asdk_app_test_fixture', copy)
             manifest = json.loads((copy / '.codex-plugin/plugin.json').read_text())
             self.assertEqual(manifest['apps'], './.app.json')
             self.assertNotIn('mcpServers', manifest)
             self.assertFalse((copy / '.mcp.json').exists())
-            self.assertTrue((copy / '.mcp.local.json').exists())
+            self.assertEqual((copy / '.mcp.local.json').read_bytes(), original)
             self.assertEqual(json.loads((copy / '.app.json').read_text())['apps']['eve-industry'],
-                             {'id': 'plugin_asdk_app_test_fixture'})
-            configure('plugin_asdk_app_test_fixture', copy)  # Idempotent rebind.
-            with self.assertRaises(ValueError):
-                configure('not-a-registered-id', copy)
+                             {'id': 'asdk_app_test_fixture', 'required': True})
+            configure('asdk_app_test_fixture', copy)  # Idempotent rebind.
+            for invalid in ('not-a-registered-id', 'plugin_asdk_app_test', 'asdk_app_v_test', 'asdk_app_'):
+                with self.assertRaises(ValueError):
+                    configure(invalid, copy)
 
     def test_custom_connection_is_not_overwritten(self):
         with tempfile.TemporaryDirectory() as temp:
             copy = Path(temp) / 'eve-industry'
             shutil.copytree(PLUGIN, copy)
+            (copy / '.app.json').unlink()
+            (copy / '.mcp.local.json').unlink()
             (copy / '.mcp.json').write_text('{"custom":true}')
             with self.assertRaises(ValueError):
-                configure('plugin_asdk_app_test_fixture', copy)
+                configure('asdk_app_test_fixture', copy)
             self.assertFalse((copy / '.app.json').exists())
             self.assertEqual((copy / '.mcp.json').read_text(), '{"custom":true}')
 

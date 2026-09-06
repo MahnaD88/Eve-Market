@@ -23,5 +23,5 @@
     ]
   },
   "repository": "https://github.com/MahnaD88/Eve-Market",
-  "mcpServers": "./.mcp.json"
+  "apps": "./.app.json"
 }
