@@ -1,0 +1,27 @@
+{
+  "name": "eve-industry",
+  "version": "0.1.0",
+  "description": "Read-only EVE manufacturing, reactions and market analysis with explicit cost completeness.",
+  "author": {
+    "name": "MahnaD88",
+    "url": "https://github.com/MahnaD88"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "EVE Industry",
+    "shortDescription": "EVE production, reactions and market evidence.",
+    "longDescription": "Use the existing EVE Industry API through five read-only MCP tools. Focused skills select only the evidence needed and disclose incomplete costs.",
+    "developerName": "MahnaD88",
+    "category": "Productivity",
+    "capabilities": [
+      "Read"
+    ],
+    "defaultPrompt": [
+      "How much is Carbon Fiber in Jita?",
+      "What is Carbon Fiber made from?",
+      "Is Carbon Fiber worth making?"
+    ]
+  },
+  "repository": "https://github.com/MahnaD88/Eve-Market",
+  "mcpServers": "./.mcp.json"
+}

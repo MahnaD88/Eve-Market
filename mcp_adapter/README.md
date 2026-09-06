@@ -117,7 +117,7 @@ success result.
 Install both root and adapter requirements for the combined suite:
 
 ```sh
-python -m pip install -r requirements.txt -r mcp_adapter/requirements.txt
+python -m pip install -r requirements.txt -r mcp_adapter/requirements.txt -r tests/requirements-plugin.txt
 python -m unittest discover -s tests -v
 ```
 
@@ -143,3 +143,7 @@ Drake orders/history, Antimatter Charge S manufacturing, Carbon Fiber reactions,
 and a deliberately unresolved item preserving false completeness and missing_prices.
 The official SDK Client also connected to the running loopback server over TCP
 and discovered the five tools. The local test server was stopped afterward.
+
+Stage 3 adds a separate optional ASGI entrypoint and plugin package; see
+[private plugin setup](../plugins/eve-industry/README.md). The original local
+server and five tool schemas are unchanged.

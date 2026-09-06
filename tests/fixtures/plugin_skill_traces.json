@@ -1,0 +1,145 @@
+{
+  "provenance": "Independent read-only model reasoning dry-run of the three skills on 2026-09-06; not installed ChatGPT traces. Defaults omitted only when baseline was accepted.",
+  "traces": [
+    {
+      "id": "price",
+      "prompt": "How much is Carbon Fiber in Jita?",
+      "skill": "eve-market",
+      "clarification": false,
+      "calls": [
+        {
+          "tool": "get_sell_orders",
+          "arguments": {
+            "request": {
+              "name": "Carbon Fiber",
+              "system_name": "Jita",
+              "top": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "history",
+      "prompt": "Show Carbon Fiber volume in The Forge over the last 30 days.",
+      "skill": "eve-market",
+      "clarification": false,
+      "calls": [
+        {
+          "tool": "get_market_history",
+          "arguments": {
+            "request": {
+              "name": "Carbon Fiber",
+              "region_name": "The Forge",
+              "days": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "recipe",
+      "prompt": "What is Carbon Fiber made from?",
+      "skill": "eve-production",
+      "clarification": false,
+      "calls": [
+        {
+          "tool": "get_production_tree",
+          "arguments": {
+            "request": {
+              "name": "Carbon Fiber"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "raw_unknown_modifiers",
+      "prompt": "What raw materials do I need for 10 Drakes? No modifiers known.",
+      "skill": "eve-production",
+      "clarification": true,
+      "calls": [],
+      "after_zero_baseline": [
+        {
+          "tool": "get_material_requirements",
+          "arguments": {
+            "request": {
+              "name": "Drake",
+              "quantity": 10
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "build_buy",
+      "prompt": "Use a zero baseline: is it cheaper to build or buy one Drake?",
+      "skill": "eve-production",
+      "clarification": false,
+      "calls": [
+        {
+          "tool": "analyze_build_vs_buy",
+          "arguments": {
+            "request": {
+              "name": "Drake",
+              "quantity": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "worth_making",
+      "prompt": "Is Carbon Fiber worth making? Sell in Jita, one requested unit, use an all-zero baseline and 30 days history.",
+      "skill": "eve-manufacturing-opportunity",
+      "clarification": false,
+      "calls": [
+        {
+          "tool": "analyze_build_vs_buy",
+          "arguments": {
+            "request": {
+              "name": "Carbon Fiber",
+              "quantity": 1
+            }
+          }
+        },
+        {
+          "tool": "get_sell_orders",
+          "arguments": {
+            "request": {
+              "name": "Carbon Fiber",
+              "system_name": "Jita"
+            }
+          }
+        },
+        {
+          "tool": "get_market_history",
+          "arguments": {
+            "request": {
+              "name": "Carbon Fiber",
+              "region_name": "The Forge",
+              "days": 30
+            }
+          }
+        }
+      ],
+      "condition": "Second and third calls only if first returns complete cost; no equivalent fresh evidence already available."
+    },
+    {
+      "id": "incomplete",
+      "prompt": "Same opportunity question; cost_complete=false, total_cost=null, missing_prices=[Hydrocarbons], build_vs_buy=null already returned.",
+      "skill": "eve-manufacturing-opportunity",
+      "clarification": false,
+      "calls": [],
+      "response_lead": "Production cost is incomplete: Hydrocarbons has no price. No reliable worth-making judgement."
+    },
+    {
+      "id": "unsupported_scan",
+      "prompt": "Find the ten most profitable things to manufacture.",
+      "skill": null,
+      "clarification": true,
+      "calls": [],
+      "response_lead": "Candidate discovery/scanning is unsupported. Ask for supplied items and scope."
+    }
+  ]
+}

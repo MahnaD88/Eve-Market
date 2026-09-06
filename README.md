@@ -145,3 +145,14 @@ and 200 Evaporite Deposits. Query the **product name**, not the formula item nam
 See [mcp_adapter/README.md](mcp_adapter/README.md) for the separate read-only
 Streamable HTTP adapter, five tool schemas, local setup and contract tests.
 The hosted backend and saved GPT configuration remain unchanged.
+
+## Private EVE Industry plugin (Stage 3)
+
+The [plugin package and connection guide](plugins/eve-industry/README.md) contain
+three focused skills, a local MCP connection and the private installation steps.
+The package is validated; public MCP hosting and ChatGPT registration remain
+pending. No backend or installed custom GPT behavior has changed.
+
+For the full suite, also install `tests/requirements-plugin.txt` (PyYAML).
+See [the evaluation report](docs/plugin-evaluation.md) for the 52-test live run,
+independent tool-selection dry run and remaining installed-ChatGPT acceptance tests.
