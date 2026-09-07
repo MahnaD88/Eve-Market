@@ -220,6 +220,24 @@ assumptions until character data exists. Ask whether the objective is accounting
 profit on eventual sale or cash realized within the horizon; default report both
 scenarios and never call produced inventory realized profit.
 
+The planning model must support one engine user selecting many characters from
+the outset, including manual per-character profiles before SSO is implemented.
+Aggregate slot counts are a summary, not interchangeable capacity: each proposed
+job belongs to a specific character, activity, compatible slot and facility.
+Keep required skills, modifiers, manufacturing/reaction/science capacity, active
+job intervals and access evidence on each character's versioned profile. Science
+capacity is represented for future research/invention support; it is never used
+as manufacturing/reaction capacity and does not make science recipes supported
+by the existing backend. Unknown eligibility or capacity blocks that assignment.
+
+Evaluate candidate-character-facility combinations jointly: the same batch may
+have different eligibility, duration and cost on different characters. Choose
+among their marginal contributions to one portfolio, rather than optimizing each
+character independently and merging results. Schedule constraints are indexed by
+character and slot over time; character completion times unlock capacity only
+when the relevant job has finished. Retain all known existing commitments against
+shared resources, including commitments from unselected linked characters.
+
 First implement a deterministic incremental-batch heuristic, not an unqualified
 optimizer: rank feasible marginal batches, place each on the earliest compatible
 slot, reserve inputs/capital and consume product demand capacity, reprice depth,
@@ -228,6 +246,15 @@ then repeat until nothing positive/feasible fits. Compare several orderings
 `solution_method=heuristic`, no optimality claim, residual budget/slots and why
 items were excluded. Repeated orders, common materials and correlated products
 must share global capacities, not independent per-item allocations.
+
+Use the ownership/access pools in section 7 for blueprint availability, materials,
+cash and facilities. A single plan budget is an upper bound across all selected
+characters, additionally constrained by each permitted funding pool; wallet
+balances are not automatically transferable or wholly available. Material or
+blueprint transfers require explicit access, locations, timing and cost
+assumptions. Planned transfers consume one source balance and create one
+destination balance after arrival. Plan reservations prevent internal reuse;
+they are not in-game reservations or guarantees of availability.
 
 Absorption cap for product i over H days is floor(alpha_i * D_i * H), less own
 existing sell inventory and planned completions when known; alpha is a disclosed
@@ -250,6 +277,15 @@ recursive in-house scheduling unsupported. Later chain scheduling expands the
 backend graph, batches shared intermediates, assigns activity-specific slots,
 enforces completion before consumption and includes every upstream slot-hour.
 Never charge only final-job time for an in-house reaction/manufacturing chain.
+
+Acceptance scenario: eight selected characters, optionally labeled as belonging
+to three EVE accounts, report 35 manufacturing and 20 reaction slots available,
+with a single 5B ISK budget and a 48-hour horizon. Require the distribution of
+those slots, skills, jobs and access per character before claiming a feasible
+allocation; aggregate counts alone permit only a capacity estimate. Return each
+job's assigned character, activity, runs, blueprint, location, start/end time and
+resource allocations, plus per-character utilization and portfolio cash/demand
+totals. No character receives a duplicate 5B budget or copy of shared inventory.
 
 ## 6. Market anomalies
 
@@ -298,11 +334,43 @@ against the then-current OpenAPI, not scopes requested in this change.
 | Wallet: `esi-wallet.read_character_wallet.v1` (optional) | Budget ceiling; manual budget suffices initially and is not permission to spend all wallet ISK. |
 | Character orders: `esi-markets.read_character_orders.v1` (optional) | Existing competing inventory, capital already committed and absorption deductions. |
 
-Minimum multi-user model: accounts -> character_links(account_id,character_id,
-owner identity) -> oauth_grants(link_id,scopes,encrypted_refresh_token,expiry,
-revoked_at) -> private_snapshots(link_id,scope,as_of,payload_ref). Add profiles,
-reservations and plans keyed by account/link plus snapshot versions. An account
-can link several characters; any sharing must be explicit. Store secrets encrypted
+Identity model: `engine_users -> many character_links -> per-character
+oauth_grants, capability_snapshots and job_snapshots`. A link records engine user
+ID, verified character ID, owner identity and link status; a grant records link ID,
+scopes, encrypted refresh token, expiry and revocation status. Private snapshots
+record their authorizing grant, subject, source interval and freshness. One engine
+user can link all eight characters without creating eight engine users. Optional
+user-maintained EVE account labels group links for display or explicit user
+constraints only; do not request account credentials or depend on discovering
+account membership through ESI. Characters remain the authenticated ESI identities.
+
+Model ownership independently from both the engine user and the observing grant:
+
+| Proposed entity | Identity and allocation rules |
+| --- | --- |
+| Resource owner | Character or corporation EVE identity; linking a character does not establish ownership of its corporation's property. |
+| Resource pool | Engine-tenant-scoped owner, resource kind and location/container or wallet division where applicable. Budget policy selects which pools may fund a plan. |
+| Resource holding | Stable item identity for blueprints/assets where available, otherwise canonical owner/location/type balance; quantity, source snapshot and observation time. Repeated observations through several grants are evidence for one holding, not additive balances. Conflicting observations require reconciliation or exclusion. |
+| Access edge | Character-to-pool/facility permitted actions, evidence, scope/role dependencies and validity. Ability to observe is separate from permission to use, withdraw, install or transfer. Unknown access is not allowed by default. |
+| Blueprint availability | One physical BPO/BPC identity with occupancy timeline; BPC remaining runs consumed once across every assignment. Copies with distinct item IDs remain distinct. |
+| Facility | One location/service identity with shared access edges and applicable constraints/costs; never clone facility resources per character. |
+| Plan and allocation ledger | Engine user, selected links, profile/snapshot versions and resource-pool policy; job assignments reference character IDs and holdings/pools. Track consumption, transfers, future output and cash events once across the whole plan. |
+
+Corporate snapshots obtained through multiple authorized characters must deduplicate
+by corporate resource identity within the tenant, retaining grant provenance.
+Do not share private corporate data across engine users merely because their
+characters belong to the same corporation. Expired/revoked access invalidates
+dependent evidence and plans; another independently valid grant may retain access
+to the same corporate resource. Unlinking one character must not revoke unrelated
+character grants. Missing corporation data stays unknown, never an empty inventory
+or inferred permission. Corporation assets/jobs, roles and facility access require
+later verified scopes and policies; manual assumptions must be explicitly labeled.
+
+Alternative evaluation scenarios each use their own ledger; do not treat them as
+simultaneous commitments. If users later mark multiple plans committed, an atomic
+tenant-level reservation ledger must prevent double allocation across those plans
+and reconcile external job/inventory changes. Even committed plans do not lock
+resources in EVE. Store secrets encrypted
 with keys outside DB/git, never in logs, MCP responses or model context. Enforce
 tenant authorization on every read/cache lookup. Serialize refresh per grant,
 handle rotation/revocation, delete private snapshots on unlink per retention policy.
@@ -353,7 +421,7 @@ backend routes. Do not add these now or expose ingestion loops to ChatGPT.
 | --- | --- | --- |
 | `find_manufacturing_opportunities` / GET `/analytics/opportunities?activity=manufacturing` | Region/system/location IDs, budget, horizon, material/fee profile, min volume, rank metric, limit/cursor, snapshot ID | Ranked batches with production evidence reference, metrics, missing data, exclusion counts and coverage. |
 | `find_reaction_opportunities` / same route with activity=reaction | Same, reaction-specific profile | Same envelope with reaction identities; do not imply manufacturing slot interchangeability. |
-| `optimize_industry_slots` / POST `/analytics/plans/evaluate` | Manufacturing/reaction counts, budget/horizon, eligible candidate set/snapshot, availability and demand policy, optional authorized profile | Schedule, batch quantities, cash timeline, aggregate demand/material use, unsold inventory, bottlenecks, scenario assumptions and solution status. POST computes only; no in-game writes. |
+| `optimize_industry_slots` / POST `/analytics/plans/evaluate` | Selected linked-character IDs or manual per-character profiles, capability/job snapshot versions, permitted resource-pool IDs, one total budget/horizon, eligible candidate set/snapshot, availability and demand policy | Character-assigned schedule with activity/slot/facility/blueprint and pool references, batch quantities, transfer/cash timeline, per-character utilization, aggregate demand/material use, unsold inventory, bottlenecks, assumptions and solution status. POST computes only; no in-game writes. |
 | `find_market_anomalies` / GET `/analytics/anomalies` | Source/destination scopes, kinds, quantity/capital limits, expense/route policy, limit/cursor | Matched depth evidence and theoretical versus qualified status, not raw regional books. |
 
 Common response: `schema_version`, `analysis_id`, `snapshot_id`, `as_of`,
@@ -373,6 +441,11 @@ and authorize private tokens. Reject arbitrary upstream URLs and private profile
 IDs without ownership. Errors return structured non-success status; no failed
 scan may become an empty successful recommendation. Keep current five MCP tools
 and deployments untouched until a separate API/MCP release is approved.
+
+Authorize every selected link, private snapshot, plan and resource-pool ID against
+the engine user; selecting a character does not grant access to all corporate
+resources. Return per-character completeness/access warnings as well as portfolio
+warnings. Aggregate slot summaries must never replace assignment-level checks.
 
 ## 10. Implementation roadmap and acceptance gates
 
@@ -395,12 +468,22 @@ and deployments untouched until a separate API/MCP release is approved.
    budget at every time, demand capacity and common-material depth never exceeded;
    zero feasible jobs is valid. Small exhaustive fixtures benchmark heuristic gap.
    Add recursive chain scheduling only after quantity/time parity gates.
+   Represent characters and shared pools in manual fixtures now; test mismatched
+   skills, separate activity slots, staggered existing jobs, shared BPC occupancy/
+   runs, inventory transfers and one global budget before authenticated rollout.
 5. **SSO and minimal private snapshots.** Separate tenant/account service; manual
    budgets first. Acceptance: cross-account denial, token revocation/rotation,
    missing-scope behavior and no secret exposure. No in-game job submission.
 6. **Character-aware rankings/portfolios.** Skill eligibility, BPC runs, assets,
    facility confirmation and existing jobs/orders. Compare manual and linked
    profiles on the same frozen snapshots; disclose stale character evidence.
+   Acceptance: eight characters with three optional account labels, 35 available
+   manufacturing slots, 20 reaction slots, 5B ISK and 48 hours; allocations obey
+   each character's constraints and shared resources are counted once. Verify
+   repeated corporate observations do not multiply inventory/capital, unavailable
+   access excludes assignments, unselected characters' existing commitments remain
+   counted, and revoking one link preserves independently authorized links. Science
+   slots stay distinct and unused until their activities are explicitly supported.
 7. **zKill signals.** Offline archives first, coverage/deduplication tests and
    event-time backtest; ranking contribution only after measured improvement.
 
